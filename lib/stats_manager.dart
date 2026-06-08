@@ -7,15 +7,34 @@ class StatsManager {
 
   static const String keyPlayed = 'total_played';
   static const String keyWins = 'total_wins';
+  static const String keyDailyPlayed = 'daily_played';
+  static const String keyDailyWins = 'daily_wins';
+  static const String keyLastReset = 'last_stats_reset';
   static const String keyFavPrefix = 'played_count_';
   static const String keyBestPrefix = 'best_score_';
 
+  Future<void> _checkDailyReset(SharedPreferences prefs) async {
+    String today = DateTime.now().toIso8601String().split('T')[0];
+    String lastReset = prefs.getString(keyLastReset) ?? "";
+
+    if (today != lastReset) {
+      await prefs.setInt(keyDailyPlayed, 0);
+      await prefs.setInt(keyDailyWins, 0);
+      await prefs.setString(keyLastReset, today);
+    }
+  }
+
   Future<void> recordGamePlay(String gameTitle) async {
     final prefs = await SharedPreferences.getInstance();
+    await _checkDailyReset(prefs);
     
     // Increment total played
     int total = prefs.getInt(keyPlayed) ?? 0;
     await prefs.setInt(keyPlayed, total + 1);
+
+    // Increment daily played
+    int daily = prefs.getInt(keyDailyPlayed) ?? 0;
+    await prefs.setInt(keyDailyPlayed, daily + 1);
 
     // Increment specific game count for "Favorite" logic
     int gameCount = prefs.getInt(keyFavPrefix + gameTitle) ?? 0;
@@ -27,8 +46,22 @@ class StatsManager {
 
   Future<void> recordWin() async {
     final prefs = await SharedPreferences.getInstance();
+    await _checkDailyReset(prefs);
+
     int wins = prefs.getInt(keyWins) ?? 0;
     await prefs.setInt(keyWins, wins + 1);
+
+    int dailyWins = prefs.getInt(keyDailyWins) ?? 0;
+    await prefs.setInt(keyDailyWins, dailyWins + 1);
+  }
+
+  Future<Map<String, int>> getDailyStats() async {
+    final prefs = await SharedPreferences.getInstance();
+    await _checkDailyReset(prefs);
+    return {
+      'played': prefs.getInt(keyDailyPlayed) ?? 0,
+      'wins': prefs.getInt(keyDailyWins) ?? 0,
+    };
   }
 
   Future<void> saveBestScore(String modeKey, int score, {bool lowerIsBetter = true}) async {

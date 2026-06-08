@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'ultimate_tic_tac_toe.dart';
+import '../stats_manager.dart';
 
 class TicTacToeMenu extends StatelessWidget {
   const TicTacToeMenu({super.key});
@@ -251,7 +252,10 @@ class _FuturisticTicTacToeState extends State<FuturisticTicTacToe> {
       setState(() {
         winner = res['winner'];
         winningLine = List<int>.from(res['line']);
-        if (winner == 'X') xWins++;
+        if (winner == 'X') {
+          xWins++;
+          StatsManager().recordWin();
+        }
         else if (winner == 'O') oWins++;
         else draws++;
       });

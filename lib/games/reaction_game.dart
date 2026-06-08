@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../stats_manager.dart';
 
 enum GameMode { classic, f1, aim, rapid, sequence, battle }
 
@@ -335,6 +336,7 @@ class _ReactionGameState extends State<ReactionGame> with SingleTickerProviderSt
         subStatus = 'LIGHTNING REFLEXES';
         if (player == 1) p1Score++; else p2Score++;
         status = 'FINISHED';
+        StatsManager().recordWin();
       });
     }
   }
@@ -395,6 +397,9 @@ class _ReactionGameState extends State<ReactionGame> with SingleTickerProviderSt
         if (bestTimes[GameMode.rapid] == null || tapCount > bestTimes[GameMode.rapid]!) {
           bestTimes[GameMode.rapid] = tapCount;
         }
+        if (tapCount > 30) {
+          StatsManager().recordWin();
+        }
       } else {
         int finalScore = selectedMode == GameMode.aim ? elapsed ~/ totalTargets : 
                          selectedMode == GameMode.sequence ? elapsed ~/ 9 : elapsed;
@@ -404,6 +409,10 @@ class _ReactionGameState extends State<ReactionGame> with SingleTickerProviderSt
         
         if (bestTimes[selectedMode!] == null || finalScore < bestTimes[selectedMode!]!) {
           bestTimes[selectedMode!] = finalScore;
+        }
+
+        if (finalScore < 280) { // FAST or better
+          StatsManager().recordWin();
         }
       }
       neonColor = Colors.cyanAccent;

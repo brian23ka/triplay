@@ -13,20 +13,22 @@ class _ChessGameState extends State<ChessGame> {
   late List<List<String>> board;
   bool isWhiteTurn = true;
   String? winner;
+  bool isAiThinking = false;
+  bool isInCheck = false;
   
   int? selectedRow;
   int? selectedCol;
   List<List<int>> validMoves = [];
   
   bool isAiMode = true;
-  int aiLevel = 5; // 1 to 10
+  int aiLevel = 5; 
   bool hasGameStarted = false;
   
   int whiteWins = 0;
   int blackWins = 0;
 
-  List<String> cyanCaptured = []; // Pieces captured BY Cyan (White)
-  List<String> pinkCaptured = []; // Pieces captured BY Pink (Black)
+  List<String> cyanCaptured = []; 
+  List<String> pinkCaptured = []; 
 
   List<Map<String, dynamic>> history = [];
 
@@ -46,6 +48,8 @@ class _ChessGameState extends State<ChessGame> {
       validMoves = [];
       cyanCaptured = [];
       pinkCaptured = [];
+      isAiThinking = false;
+      isInCheck = false;
       history = [{
         'board': _copyBoard(board),
         'cyanCaptured': List<String>.from(cyanCaptured),
@@ -72,7 +76,7 @@ class _ChessGameState extends State<ChessGame> {
   }
 
   void _undo() {
-    if (history.length > 1 && winner == null) {
+    if (history.length > 1 && winner == null && !isAiThinking) {
       HapticFeedback.mediumImpact();
       setState(() {
         if (isAiMode && history.length > 2) {
@@ -86,13 +90,14 @@ class _ChessGameState extends State<ChessGame> {
         cyanCaptured = List<String>.from(state['cyanCaptured']);
         pinkCaptured = List<String>.from(state['pinkCaptured']);
         isWhiteTurn = isAiMode ? true : (history.length % 2 != 0);
+        _updateCheckStatus();
         if (history.length == 1) hasGameStarted = false;
       });
     }
   }
 
   void _handleTap(int r, int c) {
-    if (winner != null) return;
+    if (winner != null || isAiThinking) return;
     
     String cell = board[r][c];
     String currentPrefix = isWhiteTurn ? 'w' : 'b';
@@ -138,18 +143,20 @@ class _ChessGameState extends State<ChessGame> {
       
       if (winner == null) {
         isWhiteTurn = !isWhiteTurn;
+        _updateCheckStatus();
         if (isAiMode && !isWhiteTurn) {
-          Future.delayed(const Duration(milliseconds: 400), () => _aiMove());
+          isAiThinking = true;
+          Future.delayed(const Duration(milliseconds: 500), () => _aiMove());
         }
       }
     });
   }
 
-  void _executeMove(List<List<String>> b, int fromR, int fromC, int toR, int toC) {
+  void _executeMove(List<List<String>> b, int fromR, int fromC, int toR, int toC, {bool isSimulated = false}) {
     String piece = b[fromR][fromC];
     String target = b[toR][toC];
 
-    if (target != '') {
+    if (target != '' && !isSimulated) {
       if (target.startsWith('w')) {
         pinkCaptured.add(target.substring(1));
       } else {
@@ -164,43 +171,101 @@ class _ChessGameState extends State<ChessGame> {
     b[fromR][fromC] = '';
   }
 
-  void _checkGameState() {
-    bool whiteKing = false;
-    bool blackKing = false;
-    for (var row in board) {
-      for (var cell in row) {
-        if (cell == 'wK') whiteKing = true;
-        if (cell == 'bK') blackKing = true;
+  void _updateCheckStatus() {
+    int kr = -1, kc = -1;
+    String prefix = isWhiteTurn ? 'w' : 'b';
+    for (int r = 0; r < 8; r++) {
+      for (int c = 0; c < 8; c++) {
+        if (board[r][c] == '${prefix}K') {
+          kr = r; kc = c; break;
+        }
       }
+      if (kr != -1) break;
+    }
+    setState(() {
+      isInCheck = kr != -1 && _isSquareAttacked(board, kr, kc, !isWhiteTurn);
+    });
+  }
+
+  void _checkGameState() {
+    bool canMove = false;
+    String currentPrefix = isWhiteTurn ? 'w' : 'b';
+    
+    for (int r = 0; r < 8; r++) {
+      for (int c = 0; c < 8; c++) {
+        if (board[r][c].startsWith(currentPrefix)) {
+          if (_getValidMoves(board, r, c).isNotEmpty) {
+            canMove = true;
+            break;
+          }
+        }
+      }
+      if (canMove) break;
     }
 
-    if (!whiteKing) {
-      winner = 'PINK';
-      blackWins++;
-    } else if (!blackKing) {
-      winner = 'CYAN';
-      whiteWins++;
+    if (!canMove) {
+      int kr = -1, kc = -1;
+      for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+          if (board[r][c] == '${currentPrefix}K') {
+            kr = r; kc = c; break;
+          }
+        }
+      }
+      
+      bool inCheck = kr != -1 && _isSquareAttacked(board, kr, kc, !isWhiteTurn);
+      
+      if (inCheck) {
+        winner = isWhiteTurn ? 'PINK' : 'CYAN';
+        if (isWhiteTurn) blackWins++; else whiteWins++;
+      } else {
+        winner = 'STALEMATE';
+      }
     }
   }
 
+  bool _isSquareAttacked(List<List<String>> b, int r, int c, bool byWhite) {
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 8; j++) {
+        String p = b[i][j];
+        if (p != '' && p.startsWith(byWhite ? 'w' : 'b')) {
+          String type = p.substring(1);
+          if (type == 'P') {
+            int dir = byWhite ? -1 : 1;
+            if (i + dir == r && (j - 1 == c || j + 1 == c)) return true;
+          } else {
+            var moves = _getValidMoves(b, i, j, checkCheck: false);
+            if (moves.any((m) => m[0] == r && m[1] == c)) return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   void _aiMove() {
-    if (winner != null || isWhiteTurn) return;
+    if (winner != null || isWhiteTurn) {
+      setState(() => isAiThinking = false);
+      return;
+    }
     
     List<List<int>> bestMove;
-    int depth = 3;
-    if (aiLevel >= 8) depth = 4;
-    if (aiLevel >= 10) depth = 5;
+    int depth = aiLevel >= 8 ? 4 : 3;
     
-    if (aiLevel < 7 && Random().nextDouble() > (aiLevel / 10.0)) {
+    double randomChance = aiLevel < 4 ? (4 - aiLevel) / 10.0 : 0.0;
+    
+    if (Random().nextDouble() < randomChance) {
       bestMove = _getRandomMove();
     } else {
       bestMove = _getBestMove(depth);
     }
 
+    setState(() => isAiThinking = false);
+
     if (bestMove.isNotEmpty) {
       _makeMove(bestMove[0][0], bestMove[0][1], bestMove[1][0], bestMove[1][1]);
     } else {
-      setState(() => winner = 'CYAN');
+      _checkGameState();
     }
   }
 
@@ -221,7 +286,7 @@ class _ChessGameState extends State<ChessGame> {
   }
 
   List<List<int>> _getBestMove(int depth) {
-    double bestValue = -99999;
+    double bestValue = -1000000;
     List<List<int>> move = [];
     
     var allPossible = <List<List<int>> >[];
@@ -237,17 +302,21 @@ class _ChessGameState extends State<ChessGame> {
     }
 
     allPossible.sort((a, b) {
+      int scoreA = 0;
+      int scoreB = 0;
       String targetA = board[a[1][0]][a[1][1]];
       String targetB = board[b[1][0]][b[1][1]];
-      if (targetA != '' && targetB == '') return -1;
-      if (targetA == '' && targetB != '') return 1;
-      return 0;
+      
+      if (targetA != '') scoreA += _getPieceValue(targetA.substring(1)).toInt();
+      if (targetB != '') scoreB += _getPieceValue(targetB.substring(1)).toInt();
+      
+      return scoreB.compareTo(scoreA);
     });
 
     for (var m in allPossible) {
       var tempBoard = _copyBoard(board);
-      _executeMove(tempBoard, m[0][0], m[0][1], m[1][0], m[1][1]);
-      double boardValue = _minimax(tempBoard, depth - 1, -100000, 100000, false);
+      _executeMove(tempBoard, m[0][0], m[0][1], m[1][0], m[1][1], isSimulated: true);
+      double boardValue = _minimax(tempBoard, depth - 1, -1000000, 1000000, false);
       if (boardValue > bestValue) {
         bestValue = boardValue;
         move = m;
@@ -260,14 +329,14 @@ class _ChessGameState extends State<ChessGame> {
     if (depth == 0) return _evaluateBoard(b);
     
     if (isMaximizing) {
-      double best = -99999;
+      double best = -1000000;
       for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
           if (b[r][c].startsWith('b')) {
-            var moves = _getValidMoves(b, r, c);
+            var moves = _getValidMoves(b, r, c, checkCheck: false);
             for (var m in moves) {
               var nextB = _copyBoard(b);
-              _executeMove(nextB, r, c, m[0], m[1]);
+              _executeMove(nextB, r, c, m[0], m[1], isSimulated: true);
               best = max(best, _minimax(nextB, depth - 1, alpha, beta, false));
               alpha = max(alpha, best);
               if (beta <= alpha) break;
@@ -277,14 +346,14 @@ class _ChessGameState extends State<ChessGame> {
       }
       return best;
     } else {
-      double best = 99999;
+      double best = 1000000;
       for (int r = 0; r < 8; r++) {
         for (int c = 0; c < 8; c++) {
           if (b[r][c].startsWith('w')) {
-            var moves = _getValidMoves(b, r, c);
+            var moves = _getValidMoves(b, r, c, checkCheck: false);
             for (var m in moves) {
               var nextB = _copyBoard(b);
-              _executeMove(nextB, r, c, m[0], m[1]);
+              _executeMove(nextB, r, c, m[0], m[1], isSimulated: true);
               best = min(best, _minimax(nextB, depth - 1, alpha, beta, true));
               beta = min(beta, best);
               if (beta <= alpha) break;
@@ -296,6 +365,18 @@ class _ChessGameState extends State<ChessGame> {
     }
   }
 
+  double _getPieceValue(String type) {
+    switch (type) {
+      case 'P': return 100;
+      case 'N': return 320;
+      case 'B': return 330;
+      case 'R': return 500;
+      case 'Q': return 900;
+      case 'K': return 20000;
+      default: return 0;
+    }
+  }
+
   double _evaluateBoard(List<List<String>> b) {
     double total = 0;
     for (int r = 0; r < 8; r++) {
@@ -303,22 +384,23 @@ class _ChessGameState extends State<ChessGame> {
         String p = b[r][c];
         if (p == '') continue;
         bool isWhite = p.startsWith('w');
-        double val = 0;
-        switch (p.substring(1)) {
-          case 'P': val = 1; break;
-          case 'N': val = 3; break;
-          case 'B': val = 3; break;
-          case 'R': val = 5; break;
-          case 'Q': val = 9; break;
-          case 'K': val = 100; break;
+        String type = p.substring(1);
+        double val = _getPieceValue(type);
+        
+        // Piece-Square positional bonuses
+        if (type == 'P') {
+          val += (isWhite ? (6-r) * 10 : (r-1) * 10);
+        } else if (type == 'N' || type == 'B') {
+           if (r >= 2 && r <= 5 && c >= 2 && c <= 5) val += 20;
         }
+        
         total += isWhite ? -val : val;
       }
     }
     return total;
   }
 
-  List<List<int>> _getValidMoves(List<List<String>> b, int r, int c) {
+  List<List<int>> _getValidMoves(List<List<String>> b, int r, int c, {bool checkCheck = true}) {
     String piece = b[r][c];
     if (piece == '') return [];
     String type = piece.substring(1);
@@ -373,6 +455,24 @@ class _ChessGameState extends State<ChessGame> {
         }
         break;
     }
+
+    if (checkCheck) {
+      moves.removeWhere((m) {
+        var tempBoard = _copyBoard(b);
+        _executeMove(tempBoard, r, c, m[0], m[1], isSimulated: true);
+        int kr = -1, kc = -1;
+        String kingStr = isWhite ? 'wK' : 'bK';
+        for (int i = 0; i < 8; i++) {
+          for (int j = 0; j < 8; j++) {
+            if (tempBoard[i][j] == kingStr) { kr = i; kc = j; break; }
+          }
+          if (kr != -1) break;
+        }
+        if (kr == -1) return true;
+        return _isSquareAttacked(tempBoard, kr, kc, !isWhite);
+      });
+    }
+
     return moves;
   }
 
@@ -419,6 +519,10 @@ class _ChessGameState extends State<ChessGame> {
         title: const Text('NEON CHESS', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, letterSpacing: 2)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -515,7 +619,7 @@ class _ChessGameState extends State<ChessGame> {
     IconData icon;
     switch (type) {
       case 'P': icon = Icons.person; break;
-      case 'R': icon = Icons.fort; break;
+      case 'R': icon = Icons.castle; break;
       case 'N': icon = Icons.psychology; break;
       case 'B': icon = Icons.navigation; break;
       case 'Q': icon = Icons.diamond; break;
@@ -648,11 +752,22 @@ class _ChessGameState extends State<ChessGame> {
   }
 
   Widget _buildStatusHeader() {
+    if (isAiThinking) {
+      return const Column(
+        children: [
+          Text("AI IS THINKING...", style: TextStyle(fontSize: 20, color: Colors.pinkAccent, fontWeight: FontWeight.bold)),
+          SizedBox(height: 5),
+          SizedBox(width: 150, child: LinearProgressIndicator(color: Colors.pinkAccent, backgroundColor: Colors.white10)),
+        ],
+      );
+    }
+
     String status = winner == null 
-      ? "TURN: ${isWhiteTurn ? 'CYAN' : 'PINK'}" 
-      : "WINNER: $winner";
+      ? (isInCheck ? "CHECK!" : "TURN: ${isWhiteTurn ? 'CYAN' : 'PINK'}") 
+      : winner == 'STALEMATE' ? 'DRAW: STALEMATE' : "WINNER: $winner";
+    
     Color statusColor = winner == null 
-      ? (isWhiteTurn ? Colors.cyanAccent : Colors.pinkAccent)
+      ? (isInCheck ? Colors.redAccent : (isWhiteTurn ? Colors.cyanAccent : Colors.pinkAccent))
       : Colors.yellowAccent;
 
     return AnimatedSwitcher(
@@ -660,7 +775,8 @@ class _ChessGameState extends State<ChessGame> {
       child: Text(
         status,
         key: ValueKey(status),
-        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: statusColor, shadows: [
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: statusColor, shadows: [
           Shadow(color: statusColor, blurRadius: 10)
         ]),
       ),
@@ -717,12 +833,12 @@ class _ChessGameState extends State<ChessGame> {
     String type = p.substring(1);
     IconData icon;
     switch (type) {
-      case 'P': icon = Icons.person; break; // Pawn
-      case 'R': icon = Icons.fort; break; // Rook
-      case 'N': icon = Icons.psychology; break; // Knight (using extension as a puzzle piece/horse substitute)
-      case 'B': icon = Icons.navigation; break; // Bishop
-      case 'Q': icon = Icons.diamond; break; // Queen
-      case 'K': icon = Icons.stars; break; // King
+      case 'P': icon = Icons.person; break;
+      case 'R': icon = Icons.castle; break;
+      case 'N': icon = Icons.psychology; break;
+      case 'B': icon = Icons.navigation; break;
+      case 'Q': icon = Icons.diamond; break;
+      case 'K': icon = Icons.workspace_premium; break;
       default: icon = Icons.circle;
     }
     
@@ -737,8 +853,8 @@ class _ChessGameState extends State<ChessGame> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _neonButton(Icons.undo, "UNDO", _undo, Colors.orangeAccent, history.length > 1 && winner == null),
-        _neonButton(Icons.refresh, "RESET", _resetGame, Colors.cyanAccent, true),
+        _neonButton(Icons.undo, "UNDO", _undo, Colors.orangeAccent, history.length > 1 && winner == null && !isAiThinking),
+        _neonButton(Icons.refresh, "RESET", _resetGame, Colors.cyanAccent, !isAiThinking),
       ],
     );
   }
@@ -752,7 +868,7 @@ class _ChessGameState extends State<ChessGame> {
           foregroundColor: color,
           side: BorderSide(color: color, width: 1.5),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
         ),
         onPressed: enabled ? onPressed : null,
         icon: Icon(icon, size: 20),

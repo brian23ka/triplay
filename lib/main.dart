@@ -4,10 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'games/tic_tac_toe.dart';
 import 'games/reaction_game.dart';
-import 'games/number_guess.dart';
 import 'games/pattern_memory.dart';
 import 'games/checkers.dart';
 import 'games/chess.dart';
+import 'stats_manager.dart';
 
 void main() {
   runApp(const MyApp());
@@ -86,6 +86,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Image.asset(
+                      'lib/assests/triplay.png',
+                      height: 120,
+                    ),
+                    const SizedBox(height: 30),
                     const Text(
                       'TRIPLAY',
                       style: TextStyle(
@@ -268,8 +273,8 @@ class MainHomeScreen extends StatefulWidget {
 }
 
 class _MainHomeScreenState extends State<MainHomeScreen> {
-  int totalGamesPlayed = 0;
-  int totalWins = 0;
+  int dailyPlayed = 0;
+  int dailyWins = 0;
   String favoriteGame = 'None';
 
   @override
@@ -279,10 +284,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 
   Future<void> _loadStats() async {
+    final dailyStats = await StatsManager().getDailyStats();
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      totalGamesPlayed = prefs.getInt('total_played') ?? 0;
-      totalWins = prefs.getInt('total_wins') ?? 0;
+      dailyPlayed = dailyStats['played'] ?? 0;
+      dailyWins = dailyStats['wins'] ?? 0;
       favoriteGame = prefs.getString('fav_game') ?? 'None';
     });
   }
@@ -347,6 +353,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       floating: false,
       pinned: true,
       backgroundColor: const Color(0xFF0F0F1E),
+      leading: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Image.asset('lib/assests/triplay.png'),
+      ),
       actions: [
         IconButton(
           icon: const Icon(Icons.settings, color: Colors.cyanAccent),
@@ -354,7 +364,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const SettingsScreen()),
-            );
+            ).then((_) => _loadStats());
           },
         ),
       ],
@@ -402,13 +412,19 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'DAILY SYSTEM STATS',
+            style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+          ),
+          const SizedBox(height: 15),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildStatItem('PLAYED', totalGamesPlayed.toString(), Colors.white),
-              _buildStatItem('WINS', totalWins.toString(), Colors.cyanAccent),
-              _buildStatItem('RATIO', totalGamesPlayed == 0 ? '0%' : '${((totalWins / totalGamesPlayed) * 100).toStringAsFixed(0)}%', Colors.greenAccent),
+              _buildStatItem('PLAYED', dailyPlayed.toString(), Colors.white),
+              _buildStatItem('WINS', dailyWins.toString(), Colors.cyanAccent),
+              _buildStatItem('RATIO', dailyPlayed == 0 ? '0%' : '${((dailyWins / dailyPlayed) * 100).toStringAsFixed(0)}%', Colors.greenAccent),
             ],
           ),
           const Padding(
@@ -468,13 +484,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         'game': const ReactionGame(),
       },
       {
-        'title': 'GUESS MASTER',
-        'subtitle': 'Number Mystery',
-        'icon': Icons.question_mark,
-        'color': Colors.greenAccent,
-        'game': const NumberGuessGame(),
-      },
-      {
         'title': 'SEQUENCE',
         'subtitle': 'Memory Challenge',
         'icon': Icons.psychology,
@@ -527,27 +536,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   Widget _buildFeaturedGameCard(BuildContext context, String title, String subtitle, IconData icon, Color color, Widget gameWidget) {
     return InkWell(
       onTap: () async {
-        final prefs = await SharedPreferences.getInstance();
-        int currentPlayed = prefs.getInt('total_played') ?? 0;
-        await prefs.setInt('total_played', currentPlayed + 1);
-        
-        // Track per-game play for favorite logic
-        int gamePlayed = prefs.getInt('played_$title') ?? 0;
-        await prefs.setInt('played_$title', gamePlayed + 1);
-        
-        // Update favorite game
-        List<String> gameTitles = ['TIC TAC TOE', 'REACTION', 'GUESS MASTER', 'SEQUENCE', 'CHECKERS', 'CHESS'];
-        String fav = title;
-        int max = gamePlayed + 1;
-        for(var t in gameTitles) {
-          int count = prefs.getInt('played_$t') ?? 0;
-          if(count > max) {
-            max = count;
-            fav = t;
-          }
-        }
-        await prefs.setString('fav_game', fav);
-
+        await StatsManager().recordGamePlay(title);
         if (!mounted) return;
         Navigator.push(context, MaterialPageRoute(builder: (context) => gameWidget)).then((_) => _loadStats());
       },
@@ -694,10 +683,21 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            const Center(
-              child: Text(
-                'VERSION 1.0.0',
-                style: TextStyle(color: Colors.white10, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold),
+            Center(
+              child: Column(
+                children: [
+                  TextButton(
+                    onPressed: () async {
+                      await StatsManager().resetAll();
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                    child: const Text('RESET ALL STATS', style: TextStyle(color: Colors.redAccent, fontSize: 10, letterSpacing: 1)),
+                  ),
+                  const Text(
+                    'VERSION 1.0.0',
+                    style: TextStyle(color: Colors.white10, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),

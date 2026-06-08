@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../stats_manager.dart';
 
 class CheckersGame extends StatefulWidget {
   const CheckersGame({super.key});
@@ -13,13 +14,14 @@ class _CheckersGameState extends State<CheckersGame> {
   late List<List<String>> board;
   bool isCyanTurn = true;
   String? winner;
+  bool isAiThinking = false;
   
   int? selectedRow;
   int? selectedCol;
   List<List<int>> validMoves = [];
   
   bool isAiMode = true;
-  int aiLevel = 5; // 1 to 10
+  int aiLevel = 5; 
   bool hasGameStarted = false;
   
   int cyanCaptures = 0;
@@ -43,6 +45,7 @@ class _CheckersGameState extends State<CheckersGame> {
       validMoves = [];
       cyanCaptures = 0;
       pinkCaptures = 0;
+      isAiThinking = false;
       history = [_copyBoard(board)];
       hasGameStarted = false;
     });
@@ -65,7 +68,7 @@ class _CheckersGameState extends State<CheckersGame> {
   }
 
   void _undo() {
-    if (history.length > 1 && winner == null) {
+    if (history.length > 1 && winner == null && !isAiThinking) {
       HapticFeedback.mediumImpact();
       setState(() {
         if (isAiMode && history.length > 2) {
@@ -76,13 +79,26 @@ class _CheckersGameState extends State<CheckersGame> {
         }
         board = _copyBoard(history.last);
         isCyanTurn = isAiMode ? true : (history.length % 2 != 0);
+        
+        // Recalculate captures based on current board state
+        int cPieces = 0;
+        int pPieces = 0;
+        for (var row in board) {
+          for (var cell in row) {
+            if (cell.startsWith('C')) cPieces++;
+            if (cell.startsWith('P')) pPieces++;
+          }
+        }
+        cyanCaptures = 12 - pPieces;
+        pinkCaptures = 12 - cPieces;
+
         if (history.length == 1) hasGameStarted = false;
       });
     }
   }
 
   void _handleTap(int r, int c) {
-    if (winner != null) return;
+    if (winner != null || isAiThinking) return;
     
     String cell = board[r][c];
     String currentPrefix = isCyanTurn ? 'C' : 'P';
@@ -98,6 +114,12 @@ class _CheckersGameState extends State<CheckersGame> {
       bool isValid = validMoves.any((m) => m[0] == r && m[1] == c);
       if (isValid) {
         _makeMove(selectedRow!, selectedCol!, r, c);
+      } else {
+        setState(() {
+          selectedRow = null;
+          selectedCol = null;
+          validMoves = [];
+        });
       }
     }
   }
@@ -106,6 +128,7 @@ class _CheckersGameState extends State<CheckersGame> {
     HapticFeedback.mediumImpact();
     setState(() {
       hasGameStarted = true;
+      bool captured = (toR - fromR).abs() == 2;
       _executeMove(board, fromR, fromC, toR, toC);
       history.add(_copyBoard(board));
       
@@ -116,9 +139,11 @@ class _CheckersGameState extends State<CheckersGame> {
       _checkGameState();
       
       if (winner == null) {
+        // Multi-jump logic could go here, but keeping turn-based for simplicity & consistency
         isCyanTurn = !isCyanTurn;
         if (isAiMode && !isCyanTurn) {
-          Future.delayed(const Duration(milliseconds: 400), () => _aiMove());
+          isAiThinking = true;
+          Future.delayed(const Duration(milliseconds: 600), () => _aiMove());
         }
       }
     });
@@ -145,37 +170,39 @@ class _CheckersGameState extends State<CheckersGame> {
     bool cyanHasMoves = _getAllValidMoves(board, true).isNotEmpty;
     bool pinkHasMoves = _getAllValidMoves(board, false).isNotEmpty;
 
-    if (cyanCaptures == 12 || !pinkHasMoves) {
+    if (cyanCaptures >= 12 || !pinkHasMoves) {
       winner = 'CYAN';
-    } else if (pinkCaptures == 12 || !cyanHasMoves) {
+      StatsManager().recordWin();
+    } else if (pinkCaptures >= 12 || !cyanHasMoves) {
       winner = 'PINK';
     }
   }
 
   void _aiMove() {
-    if (winner != null || isCyanTurn) return;
+    if (winner != null || isCyanTurn) {
+      setState(() => isAiThinking = false);
+      return;
+    }
     
     List<List<int>> bestMove;
-    
-    // Michael Carson's Depth Scaling
     int depth;
-    if (aiLevel >= 10) depth = 10;
-    else if (aiLevel >= 9) depth = 9;
-    else if (aiLevel >= 8) depth = 8;
-    else if (aiLevel >= 6) depth = 6;
-    else if (aiLevel >= 4) depth = 4;
+    if (aiLevel >= 9) depth = 7;
+    else if (aiLevel >= 7) depth = 6;
+    else if (aiLevel >= 5) depth = 5;
     else depth = 3;
     
-    if (aiLevel < 8 && Random().nextDouble() > (aiLevel / 10.0)) {
+    if (aiLevel < 4 && Random().nextDouble() > (aiLevel / 5.0)) {
       bestMove = _getRandomMove();
     } else {
       bestMove = _getBestMove(depth);
     }
 
+    setState(() => isAiThinking = false);
+
     if (bestMove.isNotEmpty) {
       _makeMove(bestMove[0][0], bestMove[0][1], bestMove[1][0], bestMove[1][1]);
     } else {
-      setState(() => winner = 'CYAN');
+      _checkGameState();
     }
   }
 
@@ -186,31 +213,23 @@ class _CheckersGameState extends State<CheckersGame> {
   }
 
   List<List<int>> _getBestMove(int depth) {
-    double bestValue = -double.infinity;
+    double bestValue = -1000000;
     List<List<int>> move = [];
     var allMoves = _getAllValidMoves(board, false);
 
-    // Heuristic Move Ordering (Michael Carson style)
+    // Heuristic Move Ordering
     allMoves.sort((a, b) {
-      // Prioritize jumps
       bool aIsJump = (a[0][0] - a[1][0]).abs() == 2;
       bool bIsJump = (b[0][0] - b[1][0]).abs() == 2;
       if (aIsJump && !bIsJump) return -1;
       if (!aIsJump && bIsJump) return 1;
-      
-      // Prioritize moves to edges
-      bool aToEdge = a[1][1] == 0 || a[1][1] == 7;
-      bool bToEdge = b[1][1] == 0 || b[1][1] == 7;
-      if (aToEdge && !bToEdge) return -1;
-      if (!aToEdge && bToEdge) return 1;
-
       return 0;
     });
 
     for (var m in allMoves) {
       var tempBoard = _copyBoard(board);
       _executeMove(tempBoard, m[0][0], m[0][1], m[1][0], m[1][1]);
-      double boardValue = _minimax(tempBoard, depth - 1, -100000, 100000, false);
+      double boardValue = _minimax(tempBoard, depth - 1, -1000000, 1000000, false);
       if (boardValue > bestValue) {
         bestValue = boardValue;
         move = m;
@@ -223,10 +242,10 @@ class _CheckersGameState extends State<CheckersGame> {
     if (depth == 0) return _evaluateBoard(b);
     
     var moves = _getAllValidMoves(b, !isMaximizing);
-    if (moves.isEmpty) return isMaximizing ? -10000 : 10000;
+    if (moves.isEmpty) return isMaximizing ? -100000 : 100000;
 
     if (isMaximizing) {
-      double best = -double.infinity;
+      double best = -1000000;
       for (var m in moves) {
         var nextB = _copyBoard(b);
         _executeMove(nextB, m[0][0], m[0][1], m[1][0], m[1][1]);
@@ -236,7 +255,7 @@ class _CheckersGameState extends State<CheckersGame> {
       }
       return best;
     } else {
-      double best = double.infinity;
+      double best = 1000000;
       for (var m in moves) {
         var nextB = _copyBoard(b);
         _executeMove(nextB, m[0][0], m[0][1], m[1][0], m[1][1]);
@@ -250,17 +269,6 @@ class _CheckersGameState extends State<CheckersGame> {
 
   double _evaluateBoard(List<List<String>> b) {
     double score = 0;
-    
-    // Piece weights
-    const double pawnVal = 100;
-    const double kingVal = 300;
-    const double bridgeVal = 40; // Protection of back row
-    const double centerVal = 20; // Center control
-    const double mobilityVal = 5; // Possible moves
-    
-    int pinkPieces = 0;
-    int cyanPieces = 0;
-
     for (int r = 0; r < 8; r++) {
       for (int c = 0; c < 8; c++) {
         String p = b[r][c];
@@ -268,69 +276,38 @@ class _CheckersGameState extends State<CheckersGame> {
 
         bool isPink = p.startsWith('P');
         bool isKing = p.endsWith('K');
-        
-        if (isPink) pinkPieces++; else cyanPieces++;
+        double val = isKing ? 300 : 100;
 
-        double val = isKing ? kingVal : pawnVal;
-
-        // Michael Carson's Heuristics:
-        
-        // 1. Center Control
-        if (c >= 2 && c <= 5 && r >= 2 && r <= 5) val += centerVal;
-        
-        // 2. Edge Safety (but less control)
-        if (c == 0 || c == 7) val += 10;
-
-        // 3. Advancement (Michael Carson's 'Tempos')
+        // Positional bonuses
+        if (c >= 2 && c <= 5 && r >= 2 && r <= 5) val += 10;
         if (!isKing) {
-          if (isPink) val += (r * 15);
-          else val += ((7 - r) * 15);
-        }
-
-        // 4. Back Row Bridge (Crucial defensive technique)
-        if (!isKing) {
-          if (isPink && r == 0) val += bridgeVal;
-          if (!isPink && r == 7) val += bridgeVal;
-        }
-
-        // 5. Corner Trap squares (Aura of vulnerability)
-        if (isKing) {
-          if ((r == 0 && c == 7) || (r == 7 && c == 0)) val -= 20;
+          val += isPink ? r * 5 : (7 - r) * 5;
         }
 
         if (isPink) score += val;
         else score -= val;
       }
     }
-
-    // 6. Mobility (Michael Carson's technique: active pieces are better)
-    score += (_getAllValidMoves(b, false).length * mobilityVal);
-    score -= (_getAllValidMoves(b, true).length * mobilityVal);
-
     return score;
   }
 
   bool _mustJump(List<List<String>> b, bool forCyan) {
-    return _getAllValidMoves(b, forCyan).any((m) => (m[0][0] - m[1][0]).abs() == 2);
+    String prefix = forCyan ? 'C' : 'P';
+    for (int r=0; r<8; r++) {
+      for (int c=0; c<8; c++) {
+        if (b[r][c].startsWith(prefix)) {
+          var moves = _getValidMovesForPiece(b, r, c);
+          if (moves.any((m) => (m[0] - r).abs() == 2)) return true;
+        }
+      }
+    }
+    return false;
   }
   
   List<List<List<int>>> _getAllValidMoves(List<List<String>> b, bool forCyan) {
     List<List<List<int>>> allMoves = [];
     String prefix = forCyan ? 'C' : 'P';
-    bool mustJump = false;
-    
-    for (int r=0; r<8; r++) {
-      for (int c=0; c<8; c++) {
-        if (b[r][c].startsWith(prefix)) {
-           var moves = _getValidMovesForPiece(b, r, c);
-           if (moves.any((m) => (m[0] - r).abs() == 2)) {
-             mustJump = true;
-             break;
-           }
-        }
-      }
-      if(mustJump) break;
-    }
+    bool mustJump = _mustJump(b, forCyan);
     
     for (int r=0; r<8; r++) {
       for (int c=0; c<8; c++) {
@@ -349,11 +326,11 @@ class _CheckersGameState extends State<CheckersGame> {
     List<List<int>> moves = [];
     List<List<int>> jumps = [];
     String piece = b[r][c];
+    if (piece == '') return [];
     bool isKing = piece.endsWith('K');
     bool isCyan = piece.startsWith('C');
-    int dir = isCyan ? -1 : 1;
     
-    List<int> rowDirs = isKing ? [-1, 1] : [dir];
+    List<int> rowDirs = isKing ? [-1, 1] : [isCyan ? -1 : 1];
     for (int rd in rowDirs) {
       for (int cd in [-1, 1]) {
         int nr = r + rd;
@@ -362,12 +339,10 @@ class _CheckersGameState extends State<CheckersGame> {
           moves.add([nr, nc]);
         }
         
-        int midR = r + rd;
-        int midC = c + cd;
         int endR = r + 2 * rd;
         int endC = c + 2 * cd;
         if (endR >= 0 && endR < 8 && endC >= 0 && endC < 8) {
-          String midPiece = b[midR][midC];
+          String midPiece = b[r + rd][c + cd];
           if (midPiece != '' && !midPiece.startsWith(isCyan ? 'C' : 'P') && b[endR][endC] == '') {
             jumps.add([endR, endC]);
           }
@@ -382,9 +357,13 @@ class _CheckersGameState extends State<CheckersGame> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F1E),
       appBar: AppBar(
-        title: const Text('NEON CHECKERS', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+        title: const Text('NEON CHECKERS', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, letterSpacing: 2)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -430,7 +409,7 @@ class _CheckersGameState extends State<CheckersGame> {
     return Column(
       children: [
         Text(label, style: TextStyle(color: color.withOpacity(0.7), fontSize: 10, fontWeight: FontWeight.bold)),
-        Text("$score / 12", style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
+        Text("$score / 12", style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -541,6 +520,16 @@ class _CheckersGameState extends State<CheckersGame> {
   }
 
   Widget _buildStatusHeader() {
+    if (isAiThinking) {
+      return const Column(
+        children: [
+          Text("AI IS THINKING...", style: TextStyle(fontSize: 20, color: Colors.pinkAccent, fontWeight: FontWeight.bold)),
+          SizedBox(height: 5),
+          SizedBox(width: 150, child: LinearProgressIndicator(color: Colors.pinkAccent, backgroundColor: Colors.white10)),
+        ],
+      );
+    }
+
     String status = winner == null 
       ? "TURN: ${isCyanTurn ? 'CYAN' : 'PINK'}" 
       : "WINNER: $winner";
@@ -581,7 +570,8 @@ class _CheckersGameState extends State<CheckersGame> {
             
             return GestureDetector(
               onTap: () => isDark ? _handleTap(r, c) : null,
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1A1A2E) : Colors.white10,
                   border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
@@ -619,9 +609,9 @@ class _CheckersGameState extends State<CheckersGame> {
         shape: BoxShape.circle,
         color: color.withOpacity(0.8),
         border: Border.all(color: Colors.black45, width: 2),
-        boxShadow: [BoxShadow(color: color, blurRadius: 5)],
+        boxShadow: [BoxShadow(color: color, blurRadius: 10)],
       ),
-      child: isKing ? const Icon(Icons.star, color: Colors.white, size: 20) : null,
+      child: isKing ? const Icon(Icons.workspace_premium, color: Colors.white, size: 20) : null,
     );
   }
 
@@ -629,8 +619,8 @@ class _CheckersGameState extends State<CheckersGame> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _neonButton(Icons.undo, "UNDO", _undo, Colors.orangeAccent, history.length > 1 && winner == null),
-        _neonButton(Icons.refresh, "RESET", _resetGame, Colors.cyanAccent, true),
+        _neonButton(Icons.undo, "UNDO", _undo, Colors.orangeAccent, history.length > 1 && winner == null && !isAiThinking),
+        _neonButton(Icons.refresh, "RESET", _resetGame, Colors.cyanAccent, !isAiThinking),
       ],
     );
   }
@@ -644,7 +634,7 @@ class _CheckersGameState extends State<CheckersGame> {
           foregroundColor: color,
           side: BorderSide(color: color, width: 1.5),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
         ),
         onPressed: enabled ? onPressed : null,
         icon: Icon(icon, size: 20),
