@@ -146,7 +146,8 @@ class _ChessGameState extends State<ChessGame> {
         _updateCheckStatus();
         if (isAiMode && !isWhiteTurn) {
           isAiThinking = true;
-          Future.delayed(const Duration(milliseconds: 500), () => _aiMove());
+          // Reduced delay from 500ms to 200ms for faster play
+          Future.delayed(const Duration(milliseconds: 200), () => _aiMove());
         }
       }
     });
@@ -211,6 +212,7 @@ class _ChessGameState extends State<ChessGame> {
             kr = r; kc = c; break;
           }
         }
+        if (kr != -1) break;
       }
       
       bool inCheck = kr != -1 && _isSquareAttacked(board, kr, kc, !isWhiteTurn);
@@ -250,7 +252,12 @@ class _ChessGameState extends State<ChessGame> {
     }
     
     List<List<int>> bestMove;
-    int depth = aiLevel >= 8 ? 4 : 3;
+    int depth;
+    // Optimized depths for faster play while keeping decent quality
+    if (aiLevel == 10) depth = 4;
+    else if (aiLevel == 9) depth = 4;
+    else if (aiLevel >= 5) depth = 3;
+    else depth = 2;
     
     double randomChance = aiLevel < 4 ? (4 - aiLevel) / 10.0 : 0.0;
     
@@ -301,14 +308,21 @@ class _ChessGameState extends State<ChessGame> {
       }
     }
 
+    // Improved move ordering: Captures and central control first
     allPossible.sort((a, b) {
       int scoreA = 0;
       int scoreB = 0;
+      String pieceA = board[a[0][0]][a[0][1]];
+      String pieceB = board[b[0][0]][b[0][1]];
       String targetA = board[a[1][0]][a[1][1]];
       String targetB = board[b[1][0]][b[1][1]];
       
-      if (targetA != '') scoreA += _getPieceValue(targetA.substring(1)).toInt();
-      if (targetB != '') scoreB += _getPieceValue(targetB.substring(1)).toInt();
+      if (targetA != '') scoreA += 10 * _getPieceValue(targetA.substring(1)).toInt() - _getPieceValue(pieceA.substring(1)).toInt() ~/ 10;
+      if (targetB != '') scoreB += 10 * _getPieceValue(targetB.substring(1)).toInt() - _getPieceValue(pieceB.substring(1)).toInt() ~/ 10;
+      
+      // Central control bias
+      if (a[1][0] >= 2 && a[1][0] <= 5 && a[1][1] >= 2 && a[1][1] <= 5) scoreA += 10;
+      if (b[1][0] >= 2 && b[1][0] <= 5 && b[1][1] >= 2 && b[1][1] <= 5) scoreB += 10;
       
       return scoreB.compareTo(scoreA);
     });
@@ -387,11 +401,22 @@ class _ChessGameState extends State<ChessGame> {
         String type = p.substring(1);
         double val = _getPieceValue(type);
         
-        // Piece-Square positional bonuses
+        // Advanced piece-square heuristics
         if (type == 'P') {
           val += (isWhite ? (6-r) * 10 : (r-1) * 10);
-        } else if (type == 'N' || type == 'B') {
+          if (c == 3 || c == 4) val += 10; // Center pawns
+        } else if (type == 'N') {
+           if (r >= 2 && r <= 5 && c >= 2 && c <= 5) val += 30;
+           if (r == 0 || r == 7 || c == 0 || c == 7) val -= 10; // Knights on rim are dim
+        } else if (type == 'B') {
            if (r >= 2 && r <= 5 && c >= 2 && c <= 5) val += 20;
+        } else if (type == 'R') {
+           if (isWhite && r == 1) val += 20; // Rook on 7th rank
+           if (!isWhite && r == 6) val += 20;
+        } else if (type == 'K') {
+           // Basic king safety
+           if (isWhite && r > 5) val += 10;
+           if (!isWhite && r < 2) val += 10;
         }
         
         total += isWhite ? -val : val;
@@ -655,7 +680,7 @@ class _ChessGameState extends State<ChessGame> {
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A2E),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+        border: Border.all(color: Colors.white10),
       ),
       child: Row(
         children: [

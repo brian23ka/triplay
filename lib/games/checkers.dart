@@ -128,7 +128,6 @@ class _CheckersGameState extends State<CheckersGame> {
     HapticFeedback.mediumImpact();
     setState(() {
       hasGameStarted = true;
-      bool captured = (toR - fromR).abs() == 2;
       _executeMove(board, fromR, fromC, toR, toC);
       history.add(_copyBoard(board));
       
@@ -139,11 +138,11 @@ class _CheckersGameState extends State<CheckersGame> {
       _checkGameState();
       
       if (winner == null) {
-        // Multi-jump logic could go here, but keeping turn-based for simplicity & consistency
         isCyanTurn = !isCyanTurn;
         if (isAiMode && !isCyanTurn) {
           isAiThinking = true;
-          Future.delayed(const Duration(milliseconds: 600), () => _aiMove());
+          // Reduced delay from 600ms to 200ms for faster play
+          Future.delayed(const Duration(milliseconds: 200), () => _aiMove());
         }
       }
     });
@@ -156,7 +155,6 @@ class _CheckersGameState extends State<CheckersGame> {
       int midR = (fromR + toR) ~/ 2;
       int midC = (fromC + toC) ~/ 2;
       b[midR][midC] = '';
-      if (isCyanTurn) cyanCaptures++; else pinkCaptures++;
     }
     
     b[toR][toC] = piece;
@@ -167,6 +165,18 @@ class _CheckersGameState extends State<CheckersGame> {
   }
 
   void _checkGameState() {
+    // Recalculate captures based on current board state to avoid corruption during AI simulation
+    int cPieces = 0;
+    int pPieces = 0;
+    for (var row in board) {
+      for (var cell in row) {
+        if (cell.startsWith('C')) cPieces++;
+        if (cell.startsWith('P')) pPieces++;
+      }
+    }
+    cyanCaptures = 12 - pPieces;
+    pinkCaptures = 12 - cPieces;
+
     bool cyanHasMoves = _getAllValidMoves(board, true).isNotEmpty;
     bool pinkHasMoves = _getAllValidMoves(board, false).isNotEmpty;
 
@@ -186,9 +196,14 @@ class _CheckersGameState extends State<CheckersGame> {
     
     List<List<int>> bestMove;
     int depth;
-    if (aiLevel >= 9) depth = 7;
-    else if (aiLevel >= 7) depth = 6;
-    else if (aiLevel >= 5) depth = 5;
+    // Adjusted depths for faster performance while maintaining challenge
+    if (aiLevel == 10) depth = 8;
+    else if (aiLevel == 9) depth = 7;
+    else if (aiLevel == 8) depth = 7;
+    else if (aiLevel == 7) depth = 6;
+    else if (aiLevel == 6) depth = 6;
+    else if (aiLevel == 5) depth = 5;
+    else if (aiLevel >= 3) depth = 4;
     else depth = 3;
     
     if (aiLevel < 4 && Random().nextDouble() > (aiLevel / 5.0)) {
@@ -197,12 +212,14 @@ class _CheckersGameState extends State<CheckersGame> {
       bestMove = _getBestMove(depth);
     }
 
-    setState(() => isAiThinking = false);
-
     if (bestMove.isNotEmpty) {
+      setState(() => isAiThinking = false);
       _makeMove(bestMove[0][0], bestMove[0][1], bestMove[1][0], bestMove[1][1]);
     } else {
-      _checkGameState();
+      setState(() {
+        isAiThinking = false;
+        _checkGameState();
+      });
     }
   }
 
@@ -217,7 +234,6 @@ class _CheckersGameState extends State<CheckersGame> {
     List<List<int>> move = [];
     var allMoves = _getAllValidMoves(board, false);
 
-    // Heuristic Move Ordering
     allMoves.sort((a, b) {
       bool aIsJump = (a[0][0] - a[1][0]).abs() == 2;
       bool bIsJump = (b[0][0] - b[1][0]).abs() == 2;
@@ -276,12 +292,19 @@ class _CheckersGameState extends State<CheckersGame> {
 
         bool isPink = p.startsWith('P');
         bool isKing = p.endsWith('K');
-        double val = isKing ? 300 : 100;
+        double val = isKing ? 500 : 100;
 
-        // Positional bonuses
-        if (c >= 2 && c <= 5 && r >= 2 && r <= 5) val += 10;
+        // Position bonuses
+        if (c >= 2 && c <= 5 && r >= 2 && r <= 5) val += 20; // Center control
+        if (c == 0 || c == 7) val += 15; // Edge safety (harder to jump)
+        
         if (!isKing) {
-          val += isPink ? r * 5 : (7 - r) * 5;
+          // Progress bonus
+          val += isPink ? r * 10 : (7 - r) * 10;
+          
+          // Back row protection (preventing enemy kings)
+          if (isPink && r == 0) val += 50;
+          if (!isPink && r == 7) val += 50;
         }
 
         if (isPink) score += val;

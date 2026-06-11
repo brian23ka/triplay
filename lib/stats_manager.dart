@@ -80,7 +80,18 @@ class StatsManager {
   }
 
   Future<void> _updateFavoriteGame(SharedPreferences prefs) async {
-    List<String> games = ['TIC TAC TOE', 'REACTION', 'GUESS MASTER', 'SEQUENCE', 'CHECKERS', 'CHESS'];
+    List<String> games = [
+      'NEON SNAKE', 
+      'NEON MATCH', 
+      'CHECKERS', 
+      'CHESS', 
+      'MINESWEEPER', 
+      '2048', 
+      'TIC TAC TOE', 
+      'NEON CONNECT', 
+      'REACTION', 
+      'PATTERN'
+    ];
     String fav = 'None';
     int maxCount = -1;
 

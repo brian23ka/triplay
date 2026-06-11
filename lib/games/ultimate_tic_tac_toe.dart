@@ -131,7 +131,8 @@ class _UltimateTicTacToeGameState extends State<UltimateTicTacToeGame> {
         history.add(_saveState());
 
         if (isAiMode && !xTurn) {
-          Future.delayed(const Duration(milliseconds: 600), () => _aiMove());
+          // Reduced delay from 600ms to 200ms for faster play
+          Future.delayed(const Duration(milliseconds: 200), () => _aiMove());
         }
       }
     });

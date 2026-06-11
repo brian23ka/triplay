@@ -1,13 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'games/tic_tac_toe.dart';
-import 'games/reaction_game.dart';
-import 'games/pattern_memory.dart';
-import 'games/checkers.dart';
-import 'games/chess.dart';
-import 'stats_manager.dart';
+import 'package:triplay/games/reaction_game.dart';
+import 'package:triplay/games/pattern_memory.dart';
+import 'package:triplay/games/checkers.dart';
+import 'package:triplay/games/chess.dart';
+import 'package:triplay/games/minesweeper.dart';
+import 'package:triplay/games/snake.dart';
+import 'package:triplay/games/memory_match.dart';
+import 'package:triplay/games/twenty_forty_eight.dart';
+import 'package:triplay/games/connect_four.dart';
+import 'package:triplay/games/tic_tac_toe.dart';
+import 'package:triplay/games/ping_pong.dart';
+import 'package:triplay/games/pker.dart';
+import 'package:triplay/stats_manager.dart';
 
 void main() {
   runApp(const MyApp());
@@ -204,7 +210,7 @@ class IntroScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Text(
-                'SYSTEM INITIALIZATION',
+                'WELCOME TO TRIPLAY ARCADE',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -254,7 +260,7 @@ class IntroScreen extends StatelessWidget {
                   side: const BorderSide(color: Colors.cyanAccent),
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                 ),
-                child: const Text('INITIALIZE SYSTEM', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text('START', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -371,7 +377,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       flexibleSpace: FlexibleSpaceBar(
         centerTitle: true,
         title: const Text(
-          'TRIPLAY NEON',
+          'TRIPLAY ARCADE',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             letterSpacing: 4,
@@ -397,113 +403,49 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 
   Widget _buildStatsSection() {
+    return Row(
+      children: [
+        Expanded(child: _statCard('PLAYED', dailyPlayed.toString(), Icons.play_arrow)),
+        const SizedBox(width: 15),
+        Expanded(child: _statCard('WINS', dailyWins.toString(), Icons.emoji_events)),
+      ],
+    );
+  }
+
+  Widget _statCard(String label, String value, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A2E),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.cyanAccent.withOpacity(0.05),
-            blurRadius: 20,
-            spreadRadius: 5,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'DAILY SYSTEM STATS',
-            style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-          ),
-          const SizedBox(height: 15),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildStatItem('PLAYED', dailyPlayed.toString(), Colors.white),
-              _buildStatItem('WINS', dailyWins.toString(), Colors.cyanAccent),
-              _buildStatItem('RATIO', dailyPlayed == 0 ? '0%' : '${((dailyWins / dailyPlayed) * 100).toStringAsFixed(0)}%', Colors.greenAccent),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 15),
-            child: Divider(color: Colors.white10),
-          ),
-          Row(
-            children: [
-              const Icon(Icons.star, color: Colors.amberAccent, size: 18),
-              const SizedBox(width: 10),
-              Text(
-                'FAVORITE: $favoriteGame',
-                style: const TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1),
-              ),
-            ],
-          ),
+          Icon(icon, color: Colors.cyanAccent, size: 20),
+          const SizedBox(height: 10),
+          Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatItem(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            shadows: [Shadow(color: color.withOpacity(0.5), blurRadius: 10)],
-          ),
-        ),
-      ],
     );
   }
 
   Widget _buildGameGrid(BuildContext context) {
     final List<Map<String, dynamic>> games = [
-      {
-        'title': 'TIC TAC TOE',
-        'subtitle': 'Classic & Ultimate',
-        'icon': Icons.grid_3x3,
-        'color': Colors.blueAccent,
-        'game': const TicTacToeMenu(),
-      },
-      {
-        'title': 'REACTION',
-        'subtitle': 'Speed & F1',
-        'icon': Icons.bolt,
-        'color': Colors.orangeAccent,
-        'game': const ReactionGame(),
-      },
-      {
-        'title': 'SEQUENCE',
-        'subtitle': 'Memory Challenge',
-        'icon': Icons.psychology,
-        'color': Colors.purpleAccent,
-        'game': const PatternMemoryGame(),
-      },
-      {
-        'title': 'CHECKERS',
-        'subtitle': 'Strategy Board',
-        'icon': Icons.adjust,
-        'color': Colors.cyanAccent,
-        'game': const CheckersGame(),
-      },
-      {
-        'title': 'CHESS',
-        'subtitle': 'The Ultimate Game',
-        'icon': Icons.fort,
-        'color': Colors.pinkAccent,
-        'game': const ChessGame(),
-      },
+      {'name': 'NEON SNAKE', 'icon': Icons.lens_blur, 'color': Colors.greenAccent, 'page': const SnakeGame()},
+      {'name': 'NEON MATCH', 'icon': Icons.extension, 'color': Colors.cyanAccent, 'page': const MemoryMatchGame()},
+      {'name': 'CHECKERS', 'icon': Icons.grid_4x4, 'color': Colors.orangeAccent, 'page': const CheckersGame()},
+      {'name': 'CHESS', 'icon': Icons.castle, 'color': Colors.purpleAccent, 'page': const ChessGame()},
+      {'name': 'STREET POKER 🃏', 'icon': Icons.style, 'color': Colors.pinkAccent, 'page': const PkerGame()},
+      {'name': 'NEON PONG', 'icon': Icons.sports_tennis, 'color': Colors.cyanAccent, 'page': const PingPongGame()},
+      {'name': 'MINESWEEPER', 'icon': Icons.dangerous, 'color': Colors.redAccent, 'page': const MinesweeperGame()},
+      {'name': '2048', 'icon': Icons.grid_view, 'color': Colors.yellowAccent, 'page': const TwentyFortyEightGame()},
+      {'name': 'TIC TAC TOE', 'icon': Icons.grid_3x3, 'color': Colors.cyanAccent, 'page': const TicTacToeMenu()},
+      {'name': 'STREET CONNECT', 'icon': Icons.blur_circular, 'color': Colors.cyanAccent, 'page': const ConnectFourGame()},
+      {'name': 'REACTION', 'icon': Icons.speed, 'color': Colors.pinkAccent, 'page': const ReactionGame()},
+      {'name': 'PATTERN', 'icon': Icons.memory, 'color': Colors.tealAccent, 'page': const PatternMemoryGame()},
     ];
 
     return SliverPadding(
@@ -513,76 +455,51 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           crossAxisCount: 2,
           mainAxisSpacing: 15,
           crossAxisSpacing: 15,
-          childAspectRatio: 0.85,
+          childAspectRatio: 1.1,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final game = games[index];
-            return _buildFeaturedGameCard(
-              context,
-              game['title'],
-              game['subtitle'],
-              game['icon'],
-              game['color'],
-              game['game'],
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => game['page']),
+                ).then((_) => _loadStats());
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A2E),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: game['color'].withOpacity(0.05),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    )
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(game['icon'], size: 40, color: game['color']),
+                    const SizedBox(height: 10),
+                    Text(
+                      game['name'],
+                      style: TextStyle(
+                        color: game['color'],
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           },
           childCount: games.length,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeaturedGameCard(BuildContext context, String title, String subtitle, IconData icon, Color color, Widget gameWidget) {
-    return InkWell(
-      onTap: () async {
-        await StatsManager().recordGamePlay(title);
-        if (!mounted) return;
-        Navigator.push(context, MaterialPageRoute(builder: (context) => gameWidget)).then((_) => _loadStats());
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2E),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.1),
-              blurRadius: 10,
-              spreadRadius: 0,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 35, color: color),
-            ),
-            const SizedBox(height: 15),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: color,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white38, fontSize: 10),
-            ),
-          ],
         ),
       ),
     );
@@ -592,118 +509,35 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  Future<void> _launchWhatsApp() async {
-    final Uri url = Uri.parse("https://wa.me/254116921099");
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      throw Exception('Could not launch $url');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F1E),
       appBar: AppBar(
-        title: const Text('SETTINGS', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, letterSpacing: 2)),
+        title: const Text('SETTINGS', style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
-          onPressed: () => Navigator.pop(context),
-        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(25.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'ABOUT TRIPLAY NEON',
-              style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 12),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A2E),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.cyanAccent.withOpacity(0.1)),
-              ),
-              child: const Text(
-                'Triplay Neon is a futuristic gaming hub designed for high-end mobile experiences. Featuring classic logic games and fast-paced reaction tests with advanced AI and local multiplayer support.',
-                style: TextStyle(color: Colors.white70, height: 1.6, fontSize: 14),
-              ),
-            ),
-            const SizedBox(height: 40),
-            const Text(
-              'CREATOR',
-              style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 12),
-            ),
-            const SizedBox(height: 20),
-            InkWell(
-              onTap: _launchWhatsApp,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.greenAccent.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: const BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.message, color: Colors.white, size: 24),
-                    ),
-                    const SizedBox(width: 20),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'MEET THE CREATOR',
-                            style: TextStyle(color: Colors.greenAccent, fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            'Chat on WhatsApp',
-                            style: TextStyle(color: Colors.white38, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, color: Colors.white12, size: 16),
-                  ],
-                ),
-              ),
-            ),
-            const Spacer(),
-            Center(
-              child: Column(
-                children: [
-                  TextButton(
-                    onPressed: () async {
-                      await StatsManager().resetAll();
-                      if (context.mounted) Navigator.pop(context);
-                    },
-                    child: const Text('RESET ALL STATS', style: TextStyle(color: Colors.redAccent, fontSize: 10, letterSpacing: 1)),
-                  ),
-                  const Text(
-                    'VERSION 1.0.0',
-                    style: TextStyle(color: Colors.white10, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          _buildSettingsTile(Icons.delete_outline, 'CLEAR DATA', 'Reset all game progress', () async {
+            await StatsManager().resetAll();
+            if (context.mounted) Navigator.pop(context);
+          }),
+        ],
       ),
+    );
+  }
+
+  Widget _buildSettingsTile(IconData icon, String title, String subtitle, VoidCallback onTap) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.pinkAccent),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+      onTap: onTap,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      tileColor: const Color(0xFF1A1A2E),
     );
   }
 }
