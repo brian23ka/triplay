@@ -556,7 +556,7 @@ class _PkerGameState extends State<PkerGame> {
               ),
               Row(
                 children: [
-                  _actionButton("NIKO KADI", _sayNikoKadi, nikoKadiDeclared ? Colors.greenAccent : Colors.white10),
+                  _actionButton("NIKO KADI", _sayNikoKadi, nikoKadiDeclared ? Colors.greenAccent : Colors.orangeAccent, textColor: nikoKadiDeclared ? Colors.white : Colors.black),
                   const SizedBox(width: 10),
                   _actionButton("DEPLOY", _playSelected, Colors.cyanAccent, textColor: Colors.black),
                 ],
@@ -586,7 +586,7 @@ class _PkerGameState extends State<PkerGame> {
     return ElevatedButton(
       onPressed: isAiThinking ? null : onTap,
       style: ElevatedButton.styleFrom(
-        backgroundColor: color.withOpacity(color == Colors.white10 ? 1 : 0.8),
+        backgroundColor: color.withOpacity(0.8),
         foregroundColor: textColor,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
