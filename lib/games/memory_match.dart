@@ -221,6 +221,12 @@ class _MemoryMatchGameState extends State<MemoryMatchGame> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: _showAbout,
+          ),
+        ],
       ),
       body: !gameStarted ? _buildStartScreen() : Column(
         children: [
@@ -406,5 +412,22 @@ class _MemoryMatchGameState extends State<MemoryMatchGame> {
       );
     }
     return const SizedBox.shrink();
+  }
+
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT NEON MATCH", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "A brain-training memory game. Flip cards to find matching pairs of icons. Play solo to beat your best move count, or challenge the system AI or a friend in dual-link mode.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
+      ),
+    );
   }
 }

@@ -21,14 +21,19 @@ class _NeonFlightGameState extends State<NeonFlightGame> {
   bool gameOver = false;
   int score = 0;
   int highscore = 0;
+  int currentLevel = 1;
+  bool passedBarrier1 = false;
+  bool passedBarrier2 = false;
 
   // Obstacle state
-  static double barrierX1 = 1;
+  static double barrierX1 = 1.5;
   static double barrierX2 = barrierX1 + 1.5;
-  double barrierWidth = 0.4;
-  List<double> barrierHeights = [0.6, 0.4, 0.5, 0.3]; // Heights for top barriers
+  double barrierWidth = 0.3;
+  double barrierGap = 0.55; 
+  List<double> barrierHeights = [0.1, 0.4]; // Y alignment centers for gaps
 
   void jump() {
+    if (gameOver) return;
     setState(() {
       time = 0;
       initialHeight = birdY;
@@ -38,54 +43,88 @@ class _NeonFlightGameState extends State<NeonFlightGame> {
 
   void startGame() {
     gameStarted = true;
-    Timer.periodic(const Duration(milliseconds: 60), (timer) {
-      time += 0.05;
-      height = -4.9 * time * time + 2.8 * time;
+    gameOver = false;
+    score = 0;
+    birdY = 0;
+    time = 0;
+    initialHeight = 0;
+    barrierX1 = 1.5;
+    barrierX2 = barrierX1 + 1.5;
+    passedBarrier1 = false;
+    passedBarrier2 = false;
+    
+    // Scale speed and gap with level
+    double speedScale = 0.03 + (currentLevel - 1) * 0.005;
+    double gapScale = (0.55 - (currentLevel - 1) * 0.02).clamp(0.35, 0.55);
+    setState(() {
+      barrierGap = gapScale;
+    });
+
+    Timer.periodic(const Duration(milliseconds: 30), (timer) {
+      time += 0.035;
+      height = -4.9 * time * time + 2.5 * time;
       setState(() {
-        birdY = initialHeight - height;
+        birdY = (initialHeight - height).clamp(-1.1, 1.1);
       });
 
       // Move barriers
       setState(() {
-        if (barrierX1 < -2) {
-          barrierX1 += 3;
-          barrierHeights[0] = (Random().nextInt(5) + 2) / 10;
-        } else {
-          barrierX1 -= 0.05;
+        barrierX1 -= speedScale;
+        barrierX2 -= speedScale;
+
+        if (barrierX1 < -1.5) {
+          barrierX1 = 1.5;
+          barrierHeights[0] = (Random().nextDouble() * 1.2) - 0.6; // Random gap center
+          passedBarrier1 = false;
         }
 
-        if (barrierX2 < -2) {
-          barrierX2 += 3;
-          barrierHeights[1] = (Random().nextInt(5) + 2) / 10;
-        } else {
-          barrierX2 -= 0.05;
+        if (barrierX2 < -1.5) {
+          barrierX2 = 1.5;
+          barrierHeights[1] = (Random().nextDouble() * 1.2) - 0.6;
+          passedBarrier2 = false;
         }
       });
 
       // Check collision
-      if (birdY > 1 || birdY < -1 || _checkCollision()) {
+      if (birdY >= 1.0 || birdY <= -1.0 || _checkCollision()) {
         timer.cancel();
         _endGame();
       }
 
-      // Update score
-      if (barrierX1 < -0.2 && barrierX1 > -0.25 || barrierX2 < -0.2 && barrierX2 > -0.25) {
+      // Update score and check for level up
+      if (!passedBarrier1 && barrierX1 < 0) {
         setState(() {
           score++;
+          passedBarrier1 = true;
+          if (score % 10 == 0) {
+            currentLevel++;
+            HapticFeedback.mediumImpact();
+          }
+        });
+      }
+      if (!passedBarrier2 && barrierX2 < 0) {
+        setState(() {
+          score++;
+          passedBarrier2 = true;
+          if (score % 10 == 0) {
+            currentLevel++;
+            HapticFeedback.mediumImpact();
+          }
         });
       }
     });
   }
 
   bool _checkCollision() {
-    // Collision logic for barriers
-    if (barrierX1 < 0.2 && barrierX1 > -0.2) {
-      if (birdY < -1 + barrierHeights[0] || birdY > -1 + barrierHeights[0] + 0.4) {
+    // Collision logic for barrier 1
+    if (barrierX1 < 0.15 && barrierX1 > -0.15) {
+      if (birdY < barrierHeights[0] - barrierGap / 2 || birdY > barrierHeights[0] + barrierGap / 2) {
         return true;
       }
     }
-    if (barrierX2 < 0.2 && barrierX2 > -0.2) {
-      if (birdY < -1 + barrierHeights[1] || birdY > -1 + barrierHeights[1] + 0.4) {
+    // Collision logic for barrier 2
+    if (barrierX2 < 0.15 && barrierX2 > -0.15) {
+      if (birdY < barrierHeights[1] - barrierGap / 2 || birdY > barrierHeights[1] + barrierGap / 2) {
         return true;
       }
     }
@@ -109,9 +148,10 @@ class _NeonFlightGameState extends State<NeonFlightGame> {
       gameOver = false;
       time = 0;
       initialHeight = 0;
-      barrierX1 = 1;
+      barrierX1 = 1.5;
       barrierX2 = barrierX1 + 1.5;
       score = 0;
+      currentLevel = 1;
     });
   }
 
@@ -160,9 +200,9 @@ class _NeonFlightGameState extends State<NeonFlightGame> {
                   ),
                   // Barriers
                   _buildBarrier(barrierX1, barrierHeights[0], true),
-                  _buildBarrier(barrierX1, 1 - barrierHeights[0] - 0.4, false),
+                  _buildBarrier(barrierX1, barrierHeights[0], false),
                   _buildBarrier(barrierX2, barrierHeights[1], true),
-                  _buildBarrier(barrierX2, 1 - barrierHeights[1] - 0.4, false),
+                  _buildBarrier(barrierX2, barrierHeights[1], false),
 
                   // Score
                   Positioned(
@@ -188,6 +228,15 @@ class _NeonFlightGameState extends State<NeonFlightGame> {
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
+                  // About button
+                  Positioned(
+                    top: 40,
+                    right: 20,
+                    child: IconButton(
+                      icon: const Icon(Icons.info_outline, color: Colors.white54),
+                      onPressed: _showAbout,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -203,6 +252,7 @@ class _NeonFlightGameState extends State<NeonFlightGame> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
+                      _statItem("LEVEL", currentLevel.toString(), Colors.yellowAccent),
                       _statItem("SCORE", score.toString(), Colors.cyanAccent),
                       _statItem("HIGH", highscore.toString(), Colors.pinkAccent),
                     ],
@@ -216,19 +266,38 @@ class _NeonFlightGameState extends State<NeonFlightGame> {
     );
   }
 
-  Widget _buildBarrier(double x, double h, bool isTop) {
+  Widget _buildBarrier(double x, double gapCenter, bool isTop) {
+    double barrierHeight = 1.0 - (barrierGap / 2) + (isTop ? gapCenter : -gapCenter);
+    
     return AnimatedContainer(
       alignment: Alignment(x, isTop ? -1.1 : 1.1),
       duration: const Duration(milliseconds: 0),
       child: Container(
         width: MediaQuery.of(context).size.width * barrierWidth / 2,
-        height: MediaQuery.of(context).size.height * 3 / 4 * h / 2,
+        height: MediaQuery.of(context).size.height * 3 / 4 * (barrierHeight / 2),
         decoration: BoxDecoration(
           color: Colors.pinkAccent.withOpacity(0.8),
           border: Border.all(color: Colors.pinkAccent, width: 2),
           borderRadius: BorderRadius.circular(10),
           boxShadow: [BoxShadow(color: Colors.pinkAccent.withOpacity(0.3), blurRadius: 10)],
         ),
+      ),
+    );
+  }
+
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT NEON FLIGHT", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "Pilot your craft through the system barriers. Tap to gain altitude. Don't crash into the pink walls or the floor/ceiling.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
       ),
     );
   }

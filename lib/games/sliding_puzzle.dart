@@ -106,6 +106,12 @@ class _SlidingPuzzleGameState extends State<SlidingPuzzleGame> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: _showAbout,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -205,6 +211,23 @@ class _SlidingPuzzleGameState extends State<SlidingPuzzleGame> {
     return const Text(
       "ARRANGE TILES IN SEQUENCE",
       style: TextStyle(color: Colors.white24, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold),
+    );
+  }
+
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT NEON PUZZLE", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "A classic sliding tile puzzle. Slide the numbered tiles into the empty space to arrange them in ascending order (1-15) from top-left to bottom-right.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
+      ),
     );
   }
 }

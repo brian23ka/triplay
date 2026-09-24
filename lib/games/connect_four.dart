@@ -334,26 +334,32 @@ class _ConnectFourGameState extends State<ConnectFourGame> with TickerProviderSt
     return s;
   }
 
-  void _showRules() {
+  void _showAbout() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A2E),
-        title: const Text('STREET CONNECT: PROTOCOLS', style: TextStyle(color: Colors.cyanAccent, letterSpacing: 2, fontWeight: FontWeight.bold)),
-        content: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
-          children: [
-            _RuleItem(text: "Drop data discs into the 7-column grid."),
-            _RuleItem(text: "Connect 4 discs in a straight vector."),
-            _RuleItem(text: "Vectors: Horizontal, Vertical, or Diagonal."),
-            _RuleItem(text: "VS BOSS: 10 levels of strategic depth."),
-            _RuleItem(text: "Keys 1-7 for deployment, Ctrl+Z to revert."),
-          ],
+        title: const Text('ABOUT STREET CONNECT', style: TextStyle(color: Colors.cyanAccent, letterSpacing: 2, fontWeight: FontWeight.bold)),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text("A futuristic 4-in-a-row strategy game. Drop your data discs into the grid and be the first to align four of them horizontally, vertically, or diagonally.", style: TextStyle(color: Colors.white70)),
+              SizedBox(height: 10),
+              Text("CONTROLS:", style: TextStyle(color: Colors.pinkAccent, fontWeight: FontWeight.bold, fontSize: 10)),
+              Text("• TAP a column to drop a disc.", style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text("• KEYS 1-7 for quick deployment.", style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text("• CTRL+Z to revert the last move.", style: TextStyle(color: Colors.white60, fontSize: 12)),
+            ],
+          ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('ACKNOWLEDGED', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)))],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)))],
       ),
     );
   }
+
+  void _showRules() => _showAbout();
 
   @override
   Widget build(BuildContext context) {

@@ -12,7 +12,14 @@ import 'package:triplay/games/twenty_forty_eight.dart';
 import 'package:triplay/games/connect_four.dart';
 import 'package:triplay/games/tic_tac_toe.dart';
 import 'package:triplay/games/ping_pong.dart';
+import 'package:triplay/games/brick_breaker.dart';
+import 'package:triplay/games/neon_flight.dart';
+import 'package:triplay/games/sliding_puzzle.dart';
+import 'package:triplay/games/color_match.dart';
+import 'package:triplay/games/omo_game.dart';
 import 'package:triplay/games/pker.dart';
+import 'package:triplay/games/sudoku.dart';
+import 'package:triplay/games/globe_capture.dart';
 import 'package:triplay/stats_manager.dart';
 
 void main() {
@@ -446,6 +453,13 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       {'name': 'STREET CONNECT', 'icon': Icons.blur_circular, 'color': Colors.cyanAccent, 'page': const ConnectFourGame()},
       {'name': 'REACTION', 'icon': Icons.speed, 'color': Colors.pinkAccent, 'page': const ReactionGame()},
       {'name': 'PATTERN', 'icon': Icons.memory, 'color': Colors.tealAccent, 'page': const PatternMemoryGame()},
+      {'name': 'NEON SUDOKU', 'icon': Icons.grid_on, 'color': Colors.cyanAccent, 'page': const SudokuGame()},
+      {'name': 'GLOBE CAPTURE', 'icon': Icons.public, 'color': Colors.amberAccent, 'page': const GlobeCaptureGame()},
+      {'name': 'BRICK BREAKER', 'icon': Icons.grid_view_rounded, 'color': Colors.orangeAccent, 'page': const BrickBreakerGame()},
+      {'name': 'NEON FLIGHT', 'icon': Icons.airplanemode_active, 'color': Colors.blueAccent, 'page': const NeonFlightGame()},
+      {'name': 'SLIDING PUZZLE', 'icon': Icons.extension_rounded, 'color': Colors.tealAccent, 'page': const SlidingPuzzleGame()},
+      {'name': 'COLOR DASH', 'icon': Icons.palette_rounded, 'color': Colors.pinkAccent, 'page': const ColorMatchGame()},
+      {'name': 'OMO CHALLENGE', 'icon': Icons.abc_rounded, 'color': Colors.amberAccent, 'page': const OMOGame()},
     ];
 
     return SliverPadding(

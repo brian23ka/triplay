@@ -156,22 +156,19 @@ class _PatternMemoryGameState extends State<PatternMemoryGame> with TickerProvid
     _playSequence();
   }
 
-  void _showRules() {
+  void _showAbout() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A2E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.purpleAccent)),
-        title: const Text('NEON SEQUENCE RULES', style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold)),
+        title: const Text('ABOUT NEON SEQUENCE', style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold)),
         content: const Text(
-          '1. Watch the pattern carefully.\n'
-          '2. Repeat it exactly.\n'
-          '3. 1v1 Battle: Both players must repeat the SAME sequence correctly.\n'
-          '4. First to make a mistake loses the round!',
+          'Challenge your memory by replicating increasing sequences of light and sound. In Battle mode, you and a friend face off to see who can keep up with the pattern the longest!',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('GOT IT', style: TextStyle(color: Colors.purpleAccent))),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK', style: TextStyle(color: Colors.purpleAccent))),
         ],
       ),
     );
@@ -198,7 +195,7 @@ class _PatternMemoryGameState extends State<PatternMemoryGame> with TickerProvid
           },
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.help_outline, color: Colors.purpleAccent), onPressed: _showRules),
+          IconButton(icon: const Icon(Icons.info_outline, color: Colors.purpleAccent), onPressed: _showAbout),
         ],
       ),
       body: selectedMode == null ? _buildModeSelection() : (selectedMode == PatternMode.solo ? _buildSoloGame() : _buildBattleGame()),

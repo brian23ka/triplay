@@ -462,11 +462,10 @@ class _ReactionGameState extends State<ReactionGame> with SingleTickerProviderSt
           },
         ),
         actions: [
-          if (selectedMode != null)
-            IconButton(
-              icon: const Icon(Icons.help_outline, color: Colors.cyanAccent),
-              onPressed: () => _showRules(selectedMode!),
-            ),
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: () => _showAbout(),
+          ),
         ],
       ),
       body: Stack(
@@ -953,6 +952,28 @@ class _ReactionGameState extends State<ReactionGame> with SingleTickerProviderSt
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showAbout() {
+    if (selectedMode != null) {
+      _showRules(selectedMode!);
+      return;
+    }
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT REACTION", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "Test your reflexes across multiple challenging modes! From classic reaction time to aim training and 1v1 battles. Select a mode to see specific protocols.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
       ),
     );
   }

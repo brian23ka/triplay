@@ -548,6 +548,12 @@ class _ChessGameState extends State<ChessGame> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: _showAbout,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -898,6 +904,23 @@ class _ChessGameState extends State<ChessGame> {
         onPressed: enabled ? onPressed : null,
         icon: Icon(icon, size: 20),
         label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT NEON CHESS", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "The ultimate game of strategy. Protect your King while threatening your opponent's. Features include material advantage tracking, check detection, and a powerful system AI. Supports local 2-player matches and AI challenges.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
       ),
     );
   }

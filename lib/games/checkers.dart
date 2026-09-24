@@ -387,6 +387,12 @@ class _CheckersGameState extends State<CheckersGame> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: _showAbout,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -662,6 +668,23 @@ class _CheckersGameState extends State<CheckersGame> {
         onPressed: enabled ? onPressed : null,
         icon: Icon(icon, size: 20),
         label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT NEON CHECKERS", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "A futuristic take on the classic game of Checkers. Move your pieces diagonally to capture enemy tokens. Reach the last row to become a King! Play against the system AI with adjustable difficulty or a local opponent.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
       ),
     );
   }

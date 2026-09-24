@@ -90,7 +90,8 @@ class StatsManager {
       'TIC TAC TOE', 
       'NEON CONNECT', 
       'REACTION', 
-      'PATTERN'
+      'PATTERN',
+      'NEON SUDOKU'
     ];
     String fav = 'None';
     int maxCount = -1;

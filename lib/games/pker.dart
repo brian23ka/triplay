@@ -11,34 +11,48 @@ class PkerGame extends StatefulWidget {
 }
 
 class CardModel {
-  final String suit;
-  final String rank;
+  final String suit; // '♥', '♦', '♣', '♠', 'RED', 'BLACK'
+  final String rank; // '2'-'10', 'J', 'Q', 'K', 'A', 'JOK'
   bool isSelected = false;
 
   CardModel({required this.suit, required this.rank});
 
-  String get label => rank;
+  String get label => rank == 'JOK' ? 'JK' : rank;
   
-  Color get color => (suit == '♥' || suit == '♦') ? Colors.pinkAccent : Colors.cyanAccent;
+  Color get color {
+    if (rank == 'JOK') return suit == 'RED' ? Colors.redAccent : Colors.grey.shade400;
+    return (suit == '♥' || suit == '♦') ? Colors.pinkAccent : Colors.cyanAccent;
+  }
+
+  bool isJump() => rank == 'J';
+  bool isQuestion() => rank == 'Q' || rank == '8';
+  bool isKickback() => rank == 'K';
+  bool isPenalty() => rank == '2' || rank == '3' || rank == 'JOK';
+  bool isAnswer() => rank == '4' || rank == '5' || rank == '6' || rank == '7' || rank == '9' || rank == '10' || rank == 'A';
 
   @override
-  String toString() => '$rank$suit';
+  String toString() => rank == 'JOK' ? '$suit JOKER' : '$rank$suit';
 }
 
 class _PkerGameState extends State<PkerGame> {
-  List<CardModel> deck = [];
+  List<CardModel> drawPile = [];
   List<CardModel> playerHand = [];
   List<CardModel> aiHand = [];
   List<CardModel> discardPile = [];
   
   bool isPlayerTurn = true;
   bool isAiThinking = false;
+  bool isAiMode = true;
+  bool isHandoff = false;
   String? winner;
+  
   String? currentDemandSuit;
-  String? currentDemandRank;
+  String? jokerColorDemand; // 'RED' or 'BLACK'
   int pendingPenalty = 0;
-  bool isQaMode = false;
-  bool nikoKadiDeclared = false;
+  bool questionActive = false;
+  bool nikoKadiPlayer = false;
+  bool nikoKadiAi = false;
+  int direction = 1; // 1 or -1 (though 2-player reverse is just same player again)
   
   String gameStatus = "MATCH SUIT OR RANK";
   
@@ -53,30 +67,49 @@ class _PkerGameState extends State<PkerGame> {
 
   void _startNewGame() {
     setState(() {
-      deck = _generateDeck();
-      deck.shuffle();
+      drawPile = _generateDeck();
+      drawPile.shuffle();
       playerHand = [];
       aiHand = [];
       discardPile = [];
       winner = null;
       isPlayerTurn = true;
       isAiThinking = false;
+      isHandoff = false;
       pendingPenalty = 0;
-      isQaMode = false;
-      nikoKadiDeclared = false;
+      questionActive = false;
+      nikoKadiPlayer = false;
+      nikoKadiAi = false;
+      direction = 1;
       currentDemandSuit = null;
-      currentDemandRank = null;
-      gameStatus = "STREET POKER: READY";
+      jokerColorDemand = null;
+      gameStatus = "KADI: INITIALIZING";
 
+      // Deal 4 cards each
       for (int i = 0; i < 4; i++) {
-        playerHand.add(deck.removeLast());
-        aiHand.add(deck.removeLast());
+        playerHand.add(drawPile.removeLast());
+        aiHand.add(drawPile.removeLast());
       }
 
-      // Start discard pile with a non-special card if possible
-      CardModel startCard = deck.removeLast();
+      // Valid start card logic
+      CardModel startCard;
+      do {
+        startCard = drawPile.removeLast();
+        if (_isSpecial(startCard)) {
+          drawPile.insert(0, startCard);
+          drawPile.shuffle();
+        } else {
+          break;
+        }
+      } while (true);
+      
       discardPile.add(startCard);
+      gameStatus = "YOUR TURN";
     });
+  }
+
+  bool _isSpecial(CardModel c) {
+    return c.isPenalty() || c.isQuestion() || c.isKickback() || c.isJump() || c.rank == 'A';
   }
 
   List<CardModel> _generateDeck() {
@@ -86,162 +119,212 @@ class _PkerGameState extends State<PkerGame> {
         d.add(CardModel(suit: s, rank: r));
       }
     }
+    // 2 Jokers: 1 Red, 1 Black
+    d.add(CardModel(suit: 'RED', rank: 'JOK'));
+    d.add(CardModel(suit: 'BLACK', rank: 'JOK'));
     return d;
   }
 
   CardModel get topCard => discardPile.last;
 
+  List<CardModel> get currentHand => isPlayerTurn ? playerHand : aiHand;
+
   void _drawCard() {
-    if (winner != null || !isPlayerTurn || isAiThinking) return;
+    if (winner != null || isAiThinking) return;
 
     setState(() {
       if (pendingPenalty > 0) {
-        gameStatus = "TAKING +$pendingPenalty CARDS";
-        for (int i = 0; i < pendingPenalty; i++) {
-          if (deck.isEmpty) _reshuffleDiscard();
-          if (deck.isNotEmpty) playerHand.add(deck.removeLast());
-        }
-        pendingPenalty = 0;
+        _performPenaltyDraw(isPlayerTurn);
       } else {
-        if (deck.isEmpty) _reshuffleDiscard();
-        if (deck.isNotEmpty) playerHand.add(deck.removeLast());
-        gameStatus = "CARD DRAWN";
+        _performNormalDraw(isPlayerTurn);
+        if (questionActive) {
+          questionActive = false; // Drew to answer question
+        }
       }
       _endTurn();
     });
   }
 
+  void _performNormalDraw(bool isPlayer) {
+    if (drawPile.isEmpty) _reshuffleDiscard();
+    if (drawPile.isNotEmpty) {
+      var card = drawPile.removeLast();
+      if (isPlayer) playerHand.add(card); else aiHand.add(card);
+    }
+  }
+
+  void _performPenaltyDraw(bool isPlayer) {
+    gameStatus = isPlayer ? "TAKING +$pendingPenalty CARDS" : "AI TAKES +$pendingPenalty CARDS";
+    for (int i = 0; i < pendingPenalty; i++) {
+      _performNormalDraw(isPlayer);
+    }
+    pendingPenalty = 0;
+  }
+
   void _reshuffleDiscard() {
     if (discardPile.length <= 1) return;
     CardModel top = discardPile.removeLast();
-    deck = List.from(discardPile);
-    deck.shuffle();
+    drawPile = List.from(discardPile);
+    drawPile.shuffle();
     discardPile = [top];
   }
 
   bool _isValidPlay(CardModel card) {
     if (pendingPenalty > 0) {
-      // Must play punisher or escape card
-      if (card.rank == '2' || card.rank == '3') return true;
-      if (card.rank == 'J' || card.rank == 'K' || card.rank == 'A') return true;
+      // Must follow penalty with same rank or Ace to stop
+      if (card.rank == topCard.rank) return true;
+      if (card.rank == 'A') return true;
       return false;
     }
 
-    if (isQaMode) {
-      return card.rank == 'A' || card.rank == 'Q'; // Can answer Q with A or another Q
+    if (jokerColorDemand != null) {
+      if (jokerColorDemand == 'RED') return card.suit == '♥' || card.suit == '♦';
+      if (jokerColorDemand == 'BLACK') return card.suit == '♣' || card.suit == '♠';
+    }
+
+    if (questionActive) {
+      // Must answer with matching suit or rank of the question card
+      return card.suit == topCard.suit || card.rank == topCard.rank;
     }
 
     if (currentDemandSuit != null) return card.suit == currentDemandSuit;
-    if (currentDemandRank != null) return card.rank == currentDemandRank;
 
-    return card.suit == topCard.suit || card.rank == topCard.rank;
+    return card.suit == topCard.suit || card.rank == topCard.rank || card.rank == 'JOK';
   }
 
   void _toggleSelection(int index) {
-    if (!isPlayerTurn || winner != null || isAiThinking) return;
+    if (winner != null || isAiThinking || isHandoff) return;
     setState(() {
-      String? selectedRank;
-      for (var c in playerHand) {
-        if (c.isSelected) {
-          selectedRank = c.rank;
-          break;
-        }
-      }
-
-      if (selectedRank != null && playerHand[index].rank != selectedRank) {
-        for (var c in playerHand) c.isSelected = false;
-      }
-      
-      playerHand[index].isSelected = !playerHand[index].isSelected;
+      currentHand[index].isSelected = !currentHand[index].isSelected;
     });
   }
 
   void _playSelected() {
-    if (isAiThinking) return;
-    List<CardModel> selected = playerHand.where((c) => c.isSelected).toList();
+    if (isAiThinking || winner != null || isHandoff) return;
+    List<CardModel> selected = currentHand.where((c) => c.isSelected).toList();
     if (selected.isEmpty) return;
 
-    bool allValid = selected.every((c) => _isValidPlay(c));
-    if (!allValid) {
-      setState(() => gameStatus = "INVALID PROTOCOL");
-      return;
+    // Check if multiple cards are played (only allowed for Jump, Kickback, or Winning move)
+    if (selected.length > 1) {
+      bool allSameRank = selected.every((c) => c.rank == selected[0].rank);
+      bool isWinningMove = (selected.length == currentHand.length && (isPlayerTurn ? nikoKadiPlayer : nikoKadiAi));
+      
+      if (!allSameRank && !isWinningMove) {
+        setState(() => gameStatus = "INVALID COMBO");
+        return;
+      }
     }
 
-    _executePlay(List.from(selected), true);
+    // Check validity of the play
+    if (!_isValidPlay(selected[0])) {
+       setState(() {
+         gameStatus = "WRONG PLAY! +1 PENALTY";
+         _performNormalDraw(isPlayerTurn);
+         for (var c in currentHand) c.isSelected = false;
+         _endTurn();
+       });
+       return;
+    }
+
+    _executePlay(List.from(selected), isPlayerTurn);
   }
 
   void _executePlay(List<CardModel> cards, bool isPlayer) async {
-    if (isPlayer) {
-      // Check Niko Kadi penalty if they had 2 cards and played 1 but didn't say it yet
-      // Actually, check it when the turn ENDS.
-    }
-
     for (var card in cards) {
       setState(() {
         if (isPlayer) playerHand.remove(card);
         else aiHand.remove(card);
         discardPile.add(card);
-        gameStatus = isPlayer ? "YOU PLAYED ${card.rank}${card.suit}" : "AI PLAYED ${card.rank}${card.suit}";
+        gameStatus = isPlayer ? "DEPLOYED ${card.label}" : "AI DEPLOYED ${card.label}";
       });
       await Future.delayed(const Duration(milliseconds: 600));
     }
 
-    CardModel lastPlayed = cards.last;
-    bool skipNext = false;
-    
     setState(() {
-      isQaMode = false;
+      questionActive = false; // Playing a card answers any active question
       currentDemandSuit = null;
-      currentDemandRank = null;
+      jokerColorDemand = null;
+      bool turnEnded = false;
 
-      if (lastPlayed.rank == '2') pendingPenalty += 2;
-      else if (lastPlayed.rank == '3') pendingPenalty += 3;
-      else if (lastPlayed.rank == 'Q') isQaMode = true;
-      else if (lastPlayed.rank == 'J' || lastPlayed.rank == 'K') {
-        pendingPenalty = 0; 
-        skipNext = true; // Street Poker: J/K are Jump/Kick (Skip in 2P)
-      }
-      else if (lastPlayed.rank == 'A') {
-        pendingPenalty = 0;
-        if (isPlayer) {
-          _showAceDialog();
-          return; 
-        } else {
-          _aiAceDemand();
+      // Handle Special Cards logic
+      for (var card in cards) {
+        if (card.isPenalty()) {
+          if (card.rank == '2') pendingPenalty += 2;
+          else if (card.rank == '3') pendingPenalty += 3;
+          else if (card.rank == 'JOK') {
+            pendingPenalty += 5;
+            jokerColorDemand = card.suit; // 'RED' or 'BLACK'
+          }
+        } else if (card.rank == 'A') {
+          pendingPenalty = 0; // Ace stops penalty
+          if (isPlayer) {
+            _showAceDialog();
+            turnEnded = true; // Wait for dialog
+          } else {
+            _aiAceDemand();
+          }
+        } else if (card.isJump()) {
+          // In 2P, Jump skips opponent (so same player again)
+          // direction doesn't change, we just skip the turn toggle
+        } else if (card.isKickback()) {
+          // In 2P, Kickback is basically a Jump (reverses back to you)
+        } else if (card.isQuestion()) {
+          questionActive = true;
         }
       }
 
-      _checkWinCondition();
-      if (winner == null) {
-        if (skipNext) {
-          gameStatus = isPlayer ? "JUMP! PLAY AGAIN" : "AI JUMPED! STILL AI TURN";
-          if (!isPlayer) {
-            Future.delayed(const Duration(milliseconds: 1000), _aiTurn);
-          }
+      // Check Winning Condition
+      if (isPlayer && playerHand.isEmpty) {
+        if (nikoKadiPlayer) {
+          winner = "PLAYER";
+          StatsManager().recordWin();
+          StatsManager().recordGamePlay("KADI");
         } else {
-          _endTurn();
+          gameStatus = "FAILED NIKO KADI! +2";
+          _performNormalDraw(true);
+          _performNormalDraw(true);
+        }
+      } else if (!isPlayer && aiHand.isEmpty) {
+        if (nikoKadiAi) {
+          winner = "AI";
+          StatsManager().recordGamePlay("KADI");
+        } else {
+          _performNormalDraw(false);
+          _performNormalDraw(false);
+        }
+      }
+
+      if (winner == null && !turnEnded) {
+        // Special logic: if last card was a Jump or Kickback, the player plays again
+        CardModel last = cards.last;
+        if (last.isJump() || last.isKickback()) {
+          gameStatus = isPlayer ? (isAiMode ? "CONTINUE TURN" : "PLAYER 1 CONTINUES") : "PLAYER 2 CONTINUES";
+          if (!isPlayer && isAiMode) Future.delayed(const Duration(milliseconds: 1000), _aiTurn);
+        } else if (questionActive) {
+          // Player must play an answer now if they have one
+          gameStatus = isPlayer ? (isAiMode ? "ANSWER THE QUESTION" : "P1 ANSWER REQUIRED") : (isAiMode ? "AI ANSWERING" : "P2 ANSWER REQUIRED");
+          if (!isPlayer && isAiMode) Future.delayed(const Duration(milliseconds: 1000), _aiTurn);
+        } else {
+          if (!isAiMode) {
+            setState(() => isHandoff = true);
+          } else {
+            _endTurn();
+          }
         }
       }
     });
   }
 
   void _endTurn() {
-    // Check Niko Kadi penalty for the player who just finished
-    if (isPlayerTurn && playerHand.length == 1 && !nikoKadiDeclared) {
-      gameStatus = "FORGOT NIKO KADI! +2";
-      for (int i = 0; i < 2; i++) {
-        if (deck.isEmpty) _reshuffleDiscard();
-        if (deck.isNotEmpty) playerHand.add(deck.removeLast());
-      }
-    }
-
     setState(() {
       isPlayerTurn = !isPlayerTurn;
-      nikoKadiDeclared = false;
-      if (!isPlayerTurn && winner == null) {
+      isHandoff = false;
+      if (!isPlayerTurn && winner == null && isAiMode) {
         _startAiSequence();
       } else if (isPlayerTurn) {
-        gameStatus = "YOUR TURN";
+        gameStatus = isAiMode ? "YOUR TURN" : "PLAYER 1 TURN";
+      } else {
+        gameStatus = "PLAYER 2 TURN";
       }
     });
   }
@@ -252,17 +335,6 @@ class _PkerGameState extends State<PkerGame> {
     if (mounted) _aiTurn();
   }
 
-  void _checkWinCondition() {
-    if (playerHand.isEmpty) {
-      winner = "PLAYER";
-      StatsManager().recordWin();
-      StatsManager().recordGamePlay("PKER");
-    } else if (aiHand.isEmpty) {
-      winner = "AI";
-      StatsManager().recordGamePlay("PKER");
-    }
-  }
-
   void _aiTurn() {
     if (winner != null || isPlayerTurn) return;
 
@@ -271,16 +343,11 @@ class _PkerGameState extends State<PkerGame> {
     if (playable.isEmpty) {
       setState(() {
         if (pendingPenalty > 0) {
-          gameStatus = "AI TAKES +$pendingPenalty";
-          for (int i = 0; i < pendingPenalty; i++) {
-            if (deck.isEmpty) _reshuffleDiscard();
-            if (deck.isNotEmpty) aiHand.add(deck.removeLast());
-          }
-          pendingPenalty = 0;
+          _performPenaltyDraw(false);
         } else {
-          if (deck.isEmpty) _reshuffleDiscard();
-          if (deck.isNotEmpty) aiHand.add(deck.removeLast());
+          _performNormalDraw(false);
           gameStatus = "AI DRAWS";
+          if (questionActive) questionActive = false;
         }
         isAiThinking = false;
         _endTurn();
@@ -288,27 +355,34 @@ class _PkerGameState extends State<PkerGame> {
       return;
     }
 
-    // AI Strategy: Play highest penalty cards or matching ranks
-    playable.sort((a, b) {
-      int score(String r) {
-        if (r == '2') return 3;
-        if (r == '3') return 3;
-        if (r == 'A') return 4;
-        if (r == 'J' || r == 'K') return 2;
-        return 1;
-      }
-      return score(b.rank).compareTo(score(a.rank));
-    });
+    // AI Strategy
+    // 1. If winning move possible (Must have said Niko Kadi)
+    if (nikoKadiAi && playable.every((c) => c.isAnswer() || c.isQuestion())) {
+       // Play all
+       setState(() => isAiThinking = false);
+       _executePlay(List.from(playable), false);
+       return;
+    }
 
-    String targetRank = playable.first.rank;
-    List<CardModel> combo = aiHand.where((c) => c.rank == targetRank && _isValidPlay(c)).toList();
+    // 2. Play penalty cards if possible
+    List<CardModel> penalties = playable.where((c) => c.isPenalty()).toList();
+    if (penalties.isNotEmpty) {
+      setState(() => isAiThinking = false);
+      _executePlay([penalties.first], false);
+      return;
+    }
+
+    // 3. Play normal cards
+    playable.shuffle();
+    var choice = playable.first;
     
-    if (aiHand.length - combo.length == 1) {
-      // AI "says" Niko Kadi automatically
+    // AI says Niko Kadi if 1 card remains after this
+    if (aiHand.length == 2) {
+      setState(() => nikoKadiAi = true);
     }
 
     setState(() => isAiThinking = false);
-    _executePlay(combo, false);
+    _executePlay([choice], false);
   }
 
   void _aiAceDemand() {
@@ -327,12 +401,12 @@ class _PkerGameState extends State<PkerGame> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A2E),
-        title: const Text("ACE COMMAND", style: TextStyle(color: Colors.cyanAccent, letterSpacing: 2)),
+        title: const Text("COMMANDER ACE", style: TextStyle(color: Colors.cyanAccent, letterSpacing: 2)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("DEMAND SUIT:", style: TextStyle(color: Colors.white70, fontSize: 12)),
-            const SizedBox(height: 10),
+            const Text("DEMAND PROTOCOL SUIT:", style: TextStyle(color: Colors.white70, fontSize: 12)),
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: suits.map((s) => IconButton(
@@ -340,39 +414,13 @@ class _PkerGameState extends State<PkerGame> {
                 onPressed: () {
                   setState(() {
                     currentDemandSuit = s;
-                    gameStatus = "DEMANDED $s";
+                    gameStatus = "SUIT LOCKED: $s";
                   });
                   Navigator.pop(context);
                   _endTurn();
                 },
               )).toList(),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 15),
-              child: Divider(color: Colors.white10),
-            ),
-            const Text("OR DEMAND RANK:", style: TextStyle(color: Colors.white70, fontSize: 12)),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: ['2','3','4','5','6','7','8','9','10','J','Q','K'].map((r) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.pinkAccent)),
-                    child: Text(r, style: const TextStyle(color: Colors.pinkAccent, fontWeight: FontWeight.bold)),
-                    onPressed: () {
-                      setState(() {
-                        currentDemandRank = r;
-                        gameStatus = "DEMANDED $r";
-                      });
-                      Navigator.pop(context);
-                      _endTurn();
-                    },
-                  ),
-                )).toList(),
-              ),
-            )
           ],
         ),
       ),
@@ -380,42 +428,159 @@ class _PkerGameState extends State<PkerGame> {
   }
 
   void _sayNikoKadi() {
-    if (playerHand.length == 1) {
+    if (currentHand.length <= 2) { 
       setState(() {
-        nikoKadiDeclared = true;
-        gameStatus = "NIKO KADI DECLARED!";
+        if (isPlayerTurn) {
+          nikoKadiPlayer = !nikoKadiPlayer;
+        } else {
+          nikoKadiAi = !nikoKadiAi;
+        }
+        bool active = isPlayerTurn ? nikoKadiPlayer : nikoKadiAi;
+        gameStatus = active ? "NIKO KADI ENGAGED!" : "NIKO KADI DISENGAGED";
       });
       HapticFeedback.heavyImpact();
     } else {
-      setState(() => gameStatus = "NOT YET!");
+      setState(() {
+        if (isPlayerTurn) nikoKadiPlayer = false; else nikoKadiAi = false;
+        gameStatus = "TOO MANY CARDS";
+      });
     }
   }
 
-  @override
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("KADI PROTOCOLS", style: TextStyle(color: Colors.cyanAccent)),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text("Objective: Be the first to empty your hand.", style: TextStyle(color: Colors.white70)),
+              SizedBox(height: 10),
+              Text("SPECIAL CARDS:", style: TextStyle(color: Colors.pinkAccent, fontWeight: FontWeight.bold, fontSize: 10)),
+              Text("• J (Jump): Skip opponent turn", style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text("• K (Kickback): Reverse direction (Play again)", style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text("• Q & 8 (Question): Must play another card immediately", style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text("• 2, 3, JK (Penalty): Next player draws 2, 3, or 5 cards", style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text("• A (Ace): Stops penalties and changes suit", style: TextStyle(color: Colors.white60, fontSize: 12)),
+              SizedBox(height: 10),
+              Text("NIKO KADI: You must declare this in the round before you win!", style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 10)),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
+      ),
+    );
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F1E),
       appBar: AppBar(
-        title: const Text('STREET POKER 🃏', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, letterSpacing: 2)),
+        title: const Text('STREET KADI 🃏', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, letterSpacing: 2)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(icon: const Icon(Icons.info_outline, color: Colors.cyanAccent), onPressed: _showAbout),
           IconButton(icon: const Icon(Icons.refresh, color: Colors.cyanAccent), onPressed: _startNewGame),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          _buildAiSection(),
-          const Divider(color: Colors.white10, height: 1),
-          Expanded(child: _buildPlayArea()),
-          const Divider(color: Colors.white10, height: 1),
-          _buildPlayerSection(),
+          Column(
+            children: [
+              _buildModeSelector(),
+              _buildAiSection(),
+              const Divider(color: Colors.white10, height: 1),
+              Expanded(child: _buildPlayArea()),
+              const Divider(color: Colors.white10, height: 1),
+              _buildPlayerSection(),
+            ],
+          ),
+          if (isHandoff) _buildHandoffScreen(),
+          if (winner != null) _buildWinnerOverlay(),
         ],
       ),
     );
   }
 
+  Widget _buildModeSelector() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          _modeToggleItem("STREET BOSS", isAiMode, () => setState(() { isAiMode = true; _startNewGame(); })),
+          _modeToggleItem("2 PLAYER", !isAiMode, () => setState(() { isAiMode = false; _startNewGame(); })),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeToggleItem(String title, bool isActive, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isActive ? Colors.cyanAccent.withOpacity(0.1) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: isActive ? Colors.cyanAccent : Colors.white60,
+                fontWeight: FontWeight.bold,
+                fontSize: 10,
+                letterSpacing: 1.2
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHandoffScreen() {
+    String next = isPlayerTurn ? "PLAYER 2" : "PLAYER 1";
+    Color color = isPlayerTurn ? Colors.pinkAccent : Colors.cyanAccent;
+    return Container(
+      color: Colors.black.withOpacity(0.95),
+      child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.style, color: color, size: 64),
+        const SizedBox(height: 20),
+        Text("PASS DEVICE TO $next", style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 2)),
+        const SizedBox(height: 40),
+        ElevatedButton(
+          onPressed: _endTurn,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color.withOpacity(0.1),
+            foregroundColor: color,
+            side: BorderSide(color: color, width: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 20),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          ),
+          child: const Text("START TURN", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2))
+        ),
+      ])),
+    );
+  }
+
   Widget _buildAiSection() {
+    String label = isAiMode ? "STREET BOSS" : "PLAYER 2";
+    int count = aiHand.length;
+    bool nikoKadi = nikoKadiAi;
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
@@ -423,15 +588,16 @@ class _PkerGameState extends State<PkerGame> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.computer, color: Colors.pinkAccent, size: 14),
+              Icon(isAiMode ? Icons.computer : Icons.person, color: Colors.pinkAccent, size: 14),
               const SizedBox(width: 8),
-              Text("STREET BOSS (${aiHand.length})", style: const TextStyle(color: Colors.pinkAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
+              Text("$label ($count)", style: const TextStyle(color: Colors.pinkAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
+              if (nikoKadi) const Padding(padding: EdgeInsets.only(left: 10), child: Text("NIKO KADI!", style: TextStyle(color: Colors.amberAccent, fontSize: 10, fontWeight: FontWeight.bold))),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(aiHand.length, (index) => Container(
+            children: List.generate(count, (index) => Container(
               width: 25, height: 38,
               margin: const EdgeInsets.symmetric(horizontal: 2),
               decoration: BoxDecoration(
@@ -439,7 +605,11 @@ class _PkerGameState extends State<PkerGame> {
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Colors.pinkAccent.withOpacity(0.3)),
               ),
-              child: const Center(child: Icon(Icons.style, color: Colors.pinkAccent, size: 12)),
+              child: Center(
+                child: (isAiMode || isPlayerTurn || isHandoff) 
+                  ? const Icon(Icons.style, color: Colors.pinkAccent, size: 12)
+                  : Text(aiHand[index].label, style: TextStyle(color: aiHand[index].color, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
             )),
           ),
         ],
@@ -485,18 +655,26 @@ class _PkerGameState extends State<PkerGame> {
                   decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.redAccent)),
                   child: Text("STRIKE: +$pendingPenalty CARDS", style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
-              if (currentDemandSuit != null || currentDemandRank != null)
+              if (currentDemandSuit != null)
                 Container(
                   margin: const EdgeInsets.only(top: 15),
                   child: Text(
-                    "DEMAND: ${currentDemandSuit ?? currentDemandRank}", 
+                    "SUIT: $currentDemandSuit", 
                     style: const TextStyle(color: Colors.yellowAccent, fontWeight: FontWeight.bold, fontSize: 24, shadows: [Shadow(color: Colors.yellowAccent, blurRadius: 15)])
                   ),
                 ),
-              if (isQaMode)
+              if (jokerColorDemand != null)
+                Container(
+                  margin: const EdgeInsets.only(top: 15),
+                  child: Text(
+                    "$jokerColorDemand PROTOCOL", 
+                    style: TextStyle(color: jokerColorDemand == 'RED' ? Colors.redAccent : Colors.white70, fontWeight: FontWeight.bold, fontSize: 22, shadows: [Shadow(color: jokerColorDemand == 'RED' ? Colors.redAccent : Colors.white, blurRadius: 15)])
+                  ),
+                ),
+              if (questionActive)
                 const Padding(
                   padding: EdgeInsets.only(top: 15),
-                  child: Text("Q&A MODE: ANSWER WITH ACE/Q", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                  child: Text("QUESTION ACTIVE: ANSWER REQUIRED", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
               if (isAiThinking)
                 const Padding(
@@ -527,7 +705,7 @@ class _PkerGameState extends State<PkerGame> {
           children: [
             const Icon(Icons.add_to_photos, color: Colors.cyanAccent, size: 30),
             const SizedBox(height: 5),
-            Text("${deck.length}", style: const TextStyle(color: Colors.cyanAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text("${drawPile.length}", style: const TextStyle(color: Colors.cyanAccent, fontSize: 16, fontWeight: FontWeight.bold)),
             const Text("DRAW", style: TextStyle(color: Colors.cyanAccent, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
           ],
         ),
@@ -536,6 +714,9 @@ class _PkerGameState extends State<PkerGame> {
   }
 
   Widget _buildPlayerSection() {
+    String label = isPlayerTurn ? (isAiMode ? "OPERATIVE" : "PLAYER 1") : "PLAYER 2";
+    bool nikoKadi = isPlayerTurn ? nikoKadiPlayer : nikoKadiAi;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -547,16 +728,16 @@ class _PkerGameState extends State<PkerGame> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("OPERATIVE", style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                  Text("HAND TERMINAL", style: TextStyle(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.bold)),
+                  Text(label, style: TextStyle(color: isPlayerTurn ? Colors.cyanAccent : Colors.pinkAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                  if (nikoKadi) const Text("NIKO KADI!", style: TextStyle(color: Colors.amberAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                 ],
               ),
               Row(
                 children: [
-                  _actionButton("NIKO KADI", _sayNikoKadi, nikoKadiDeclared ? Colors.greenAccent : Colors.orangeAccent, textColor: nikoKadiDeclared ? Colors.white : Colors.black),
+                  _actionButton("NIKO KADI", _sayNikoKadi, nikoKadi ? Colors.greenAccent : Colors.orangeAccent, textColor: nikoKadi ? Colors.white : Colors.black),
                   const SizedBox(width: 10),
                   _actionButton("DEPLOY", _playSelected, Colors.cyanAccent, textColor: Colors.black),
                 ],
@@ -566,16 +747,30 @@ class _PkerGameState extends State<PkerGame> {
           const SizedBox(height: 15),
           SizedBox(
             height: 120,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: playerHand.asMap().entries.map((e) => GestureDetector(
-                  onTap: () => _toggleSelection(e.key),
-                  child: _buildCard(e.value, isSelected: e.value.isSelected),
-                )).toList(),
-              ),
-            ),
+            child: (!isHandoff && (isAiMode ? isPlayerTurn : true)) 
+              ? SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: currentHand.asMap().entries.map((e) => GestureDetector(
+                      onTap: () => _toggleSelection(e.key),
+                      child: _buildCard(e.value, isSelected: e.value.isSelected),
+                    )).toList(),
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(currentHand.length, (index) => Container(
+                    width: 25, height: 38,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFF1A1A2E), Color(0xFF0F0F1E)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                    ),
+                    child: const Center(child: Icon(Icons.style, color: Colors.cyanAccent, size: 12)),
+                  )),
+                ),
           ),
         ],
       ),
@@ -614,9 +809,9 @@ class _PkerGameState extends State<PkerGame> {
       ),
       child: Stack(
         children: [
-          Positioned(top: 5, left: 5, child: Text(card.rank, style: TextStyle(color: card.color, fontWeight: FontWeight.bold, fontSize: 16))),
+          Positioned(top: 5, left: 5, child: Text(card.label, style: TextStyle(color: card.color, fontWeight: FontWeight.bold, fontSize: 16))),
           Center(child: Text(card.suit, style: TextStyle(color: card.color, fontSize: 28))),
-          Positioned(bottom: 5, right: 5, child: Text(card.rank, style: TextStyle(color: card.color, fontWeight: FontWeight.bold, fontSize: 16))),
+          Positioned(bottom: 5, right: 5, child: Text(card.label, style: TextStyle(color: card.color, fontWeight: FontWeight.bold, fontSize: 16))),
           if (isSelected) Container(decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: Colors.yellowAccent.withOpacity(0.1))),
         ],
       ),

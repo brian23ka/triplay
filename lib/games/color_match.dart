@@ -119,6 +119,12 @@ class _ColorMatchGameState extends State<ColorMatchGame> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: _showAbout,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -225,6 +231,23 @@ class _ColorMatchGameState extends State<ColorMatchGame> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT COLOR DASH", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "Test your focus! The word displayed might be 'RED' but it could be colored BLUE. Your goal is to select the circle that matches the COLOR of the word, not what the word says.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
       ),
     );
   }

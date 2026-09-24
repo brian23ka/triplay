@@ -32,6 +32,7 @@ class _BrickBreakerGameState extends State<BrickBreakerGame> {
   bool gameOver = false;
   bool gameWon = false;
   int score = 0;
+  int currentLevel = 1;
   Timer? timer;
 
   @override
@@ -44,17 +45,92 @@ class _BrickBreakerGameState extends State<BrickBreakerGame> {
     setState(() {
       ballX = 0;
       ballY = 0.8;
-      ballDX = 0.015;
-      ballDY = -0.015;
+      double speedMultiplier = 1.0 + (currentLevel - 1) * 0.15;
+      ballDX = 0.015 * speedMultiplier;
+      ballDY = -0.015 * speedMultiplier;
       paddleX = 0;
-      bricks = List.generate(brickRows, (_) => List.filled(brickCols, true));
-      bricksRemaining = brickRows * brickCols;
+      bricks = _generatePattern(currentLevel);
+      bricksRemaining = 0;
+      for (var row in bricks) {
+        for (var b in row) {
+          if (b) bricksRemaining++;
+        }
+      }
       isPlaying = false;
       gameOver = false;
       gameWon = false;
       score = 0;
     });
     timer?.cancel();
+  }
+
+  void _nextLevel() {
+    setState(() {
+      currentLevel++;
+      ballX = 0;
+      ballY = 0.8;
+      double speedMultiplier = 1.0 + (currentLevel - 1) * 0.15;
+      ballDX = 0.015 * speedMultiplier;
+      ballDY = -0.015 * speedMultiplier;
+      paddleX = 0;
+      bricks = _generatePattern(currentLevel);
+      bricksRemaining = 0;
+      for (var row in bricks) {
+        for (var b in row) {
+          if (b) bricksRemaining++;
+        }
+      }
+      isPlaying = false;
+      gameOver = false;
+      gameWon = false;
+    });
+    timer?.cancel();
+  }
+
+  List<List<bool>> _generatePattern(int level) {
+    int patternIdx = (level - 1) % 5;
+    List<List<bool>> grid = List.generate(brickRows, (_) => List.filled(brickCols, false));
+
+    switch (patternIdx) {
+      case 0: // Full
+        for (int r = 0; r < brickRows; r++) {
+          for (int c = 0; c < brickCols; c++) {
+            grid[r][c] = true;
+          }
+        }
+        break;
+      case 1: // Checkerboard
+        for (int r = 0; r < brickRows; r++) {
+          for (int c = 0; c < brickCols; c++) {
+            grid[r][c] = (r + c) % 2 == 0;
+          }
+        }
+        break;
+      case 2: // Hollow
+        for (int r = 0; r < brickRows; r++) {
+          for (int c = 0; c < brickCols; c++) {
+            if (r == 0 || r == brickRows - 1 || c == 0 || c == brickCols - 1) {
+              grid[r][c] = true;
+            }
+          }
+        }
+        break;
+      case 3: // V-shape
+        for (int c = 0; c < brickCols; c++) {
+          int r = (c - brickCols ~/ 2).abs();
+          if (r < brickRows) grid[r][c] = true;
+        }
+        break;
+      case 4: // Random scattering
+        Random rand = Random();
+        for (int r = 0; r < brickRows; r++) {
+          for (int c = 0; c < brickCols; c++) {
+            grid[r][c] = rand.nextDouble() < 0.6;
+          }
+        }
+        break;
+    }
+    return grid;
   }
 
   void _startGame() {
@@ -142,6 +218,12 @@ class _BrickBreakerGameState extends State<BrickBreakerGame> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: _showAbout,
+          ),
+        ],
       ),
       body: GestureDetector(
         onHorizontalDragUpdate: (details) {
@@ -190,6 +272,7 @@ class _BrickBreakerGameState extends State<BrickBreakerGame> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
+          _scoreItem("LEVEL", currentLevel.toString(), Colors.yellowAccent),
           _scoreItem("SCORE", score.toString(), Colors.cyanAccent),
           _scoreItem("REMAINING", bricksRemaining.toString(), Colors.pinkAccent),
         ],
@@ -289,14 +372,14 @@ class _BrickBreakerGameState extends State<BrickBreakerGame> {
               ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _resetGame,
+              onPressed: gameWon ? _nextLevel : _resetGame,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A1A2E),
                 foregroundColor: Colors.cyanAccent,
                 side: const BorderSide(color: Colors.cyanAccent),
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
               ),
-              child: const Text("INITIALIZE"),
+              child: Text(gameWon ? "NEXT PROTOCOL" : "INITIALIZE"),
             ),
             const SizedBox(height: 10),
             if (!gameOver && !gameWon)
@@ -306,6 +389,23 @@ class _BrickBreakerGameState extends State<BrickBreakerGame> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT NEON BREAKER", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "Use the paddle to bounce the ball and destroy all the neon bricks. Don't let the ball fall below the paddle! Drag horizontally to control the paddle.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
       ),
     );
   }

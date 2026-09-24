@@ -17,6 +17,12 @@ class TicTacToeMenu extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: () => _showAbout(context),
+          ),
+        ],
       ),
       body: Center(
         child: Column(
@@ -78,6 +84,23 @@ class TicTacToeMenu extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showAbout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT NEON TIC TAC TOE", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "Choose between Classic Neon for a traditional 3x3 match or Ultimate Grid for a deeper, strategic multi-layered experience. Both modes support system AI and local play.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
       ),
     );
   }

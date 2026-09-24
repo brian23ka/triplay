@@ -127,6 +127,12 @@ class _SnakeGameState extends State<SnakeGame> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.cyanAccent),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.cyanAccent),
+            onPressed: _showAbout,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -302,6 +308,23 @@ class _SnakeGameState extends State<SnakeGame> {
         ),
         IconButton(icon: const Icon(Icons.arrow_downward, color: Colors.white38), onPressed: () { if(direction != Direction.up) setState(() => direction = Direction.down); }),
       ],
+    );
+  }
+
+  void _showAbout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text("ABOUT NEON SNAKE", style: TextStyle(color: Colors.cyanAccent)),
+        content: const Text(
+          "Navigate the neon snake to consume the pink energy cores. Each core increases your length and score. Don't collide with yourself! Use the swipe gestures or the directional pad to steer.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+        ],
+      ),
     );
   }
 }
